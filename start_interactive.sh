@@ -23,60 +23,50 @@ python merchant.py --port 5001 --coordinator localhost:5000 > /tmp/merchant.log 
 MERCHANT_PID=$!
 sleep 2
 
-echo "启动村民节点..."
-
-echo "  - Alice (端口 5002)"
-python villager.py --port 5002 --id alice --coordinator localhost:5000 > /tmp/alice.log 2>&1 &
-ALICE_PID=$!
-sleep 1
-
-echo "  - Bob (端口 5003)"
-python villager.py --port 5003 --id bob --coordinator localhost:5000 > /tmp/bob.log 2>&1 &
-BOB_PID=$!
-sleep 1
-
-echo "  - Charlie (端口 5004)"
-python villager.py --port 5004 --id charlie --coordinator localhost:5000 > /tmp/charlie.log 2>&1 &
-CHARLIE_PID=$!
-sleep 1
-
-echo "  - Diana (端口 5005)"
-python villager.py --port 5005 --id diana --coordinator localhost:5000 > /tmp/diana.log 2>&1 &
-DIANA_PID=$!
-sleep 2
+echo ""
+echo "村民节点需要手动创建。"
 
 echo ""
 echo "======================================================"
-echo "✓ 所有服务已启动！"
+echo "✓ 基础设施已启动！"
 echo "======================================================"
 echo ""
 echo "基础设施:"
 echo "  协调器:  http://localhost:5000"
 echo "  商人:    http://localhost:5001"
 echo ""
-echo "村民节点:"
-echo "  Alice:   http://localhost:5002 (farmer - 农夫)"
-echo "  Bob:     http://localhost:5003 (chef - 厨师)"
-echo "  Charlie: http://localhost:5004 (carpenter - 木工)"
-echo "  Diana:   http://localhost:5005 (自定义)"
-echo ""
 echo "======================================================"
-echo "开始游戏："
+echo "创建村民节点："
 echo "======================================================"
 echo ""
-echo "在不同的终端窗口运行以下命令来控制不同的村民："
+echo "在新终端中启动村民节点（每个村民一个终端）："
 echo ""
-echo "  # 控制Alice"
+echo "  # 终端A：启动Alice节点"
+echo "  cd $(pwd) && conda activate distribu-town"
+echo "  python architecture2_rest/villager.py --port 5002 --id alice"
+echo ""
+echo "  # 终端B：启动Bob节点"
+echo "  python architecture2_rest/villager.py --port 5003 --id bob"
+echo ""
+echo "  # 终端C：启动Charlie节点"
+echo "  python architecture2_rest/villager.py --port 5004 --id charlie"
+echo ""
+echo "======================================================"
+echo "连接到村民节点："
+echo "======================================================"
+echo ""
+echo "启动村民节点后，在另一个终端连接CLI控制："
+echo ""
+echo "  # 控制Alice（确保Alice节点已启动在5002端口）"
 echo "  python architecture2_rest/interactive_cli.py --port 5002"
 echo ""
-echo "  # 控制Bob"
+echo "  # 控制Bob（确保Bob节点已启动在5003端口）"
 echo "  python architecture2_rest/interactive_cli.py --port 5003"
 echo ""
-echo "  # 控制Charlie"
-echo "  python architecture2_rest/interactive_cli.py --port 5004"
-echo ""
-echo "  # 控制Diana"
-echo "  python architecture2_rest/interactive_cli.py --port 5005"
+echo "提示："
+echo "  1. 先启动村民节点 (villager.py)"
+echo "  2. 再连接CLI控制台 (interactive_cli.py)"
+echo "  3. 在CLI中使用 'create' 命令初始化村民"
 echo ""
 echo "======================================================"
 echo "日志文件位置："
@@ -94,7 +84,7 @@ echo "按 Ctrl+C 停止所有服务"
 echo ""
 
 # 捕获Ctrl+C信号
-trap "echo ''; echo '停止所有服务...'; kill $COORD_PID $MERCHANT_PID $ALICE_PID $BOB_PID $CHARLIE_PID $DIANA_PID 2>/dev/null; echo '✓ 所有服务已停止'; exit" INT
+trap "echo ''; echo '停止所有服务...'; kill $COORD_PID $MERCHANT_PID 2>/dev/null; echo '✓ 基础设施已停止'; echo '提示: 手动停止村民节点 (Ctrl+C)'; exit" INT
 
 # 等待
 wait

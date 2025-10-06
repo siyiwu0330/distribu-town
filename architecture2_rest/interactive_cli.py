@@ -70,14 +70,25 @@ class VillagerCLI:
             print("\n村民未初始化")
             return
         
+        # 根据行动点显示时段提示
+        time_period_hint = ""
+        if info['action_points'] == 3:
+            time_period_hint = " [早晨 - 新时段开始]"
+        elif info['action_points'] == 2:
+            time_period_hint = " [已工作1次]"
+        elif info['action_points'] == 1:
+            time_period_hint = " [已工作2次]"
+        elif info['action_points'] == 0:
+            time_period_hint = " [⚠️ 行动点用完，建议推进时间]"
+        
         print("\n" + "="*50)
         print(f"  {info['name']} - {info['occupation']}")
         print("="*50)
         print(f"性别: {info['gender']}")
         print(f"性格: {info['personality']}")
-        print(f"体力: {info['stamina']}/{info['max_stamina']}")
-        print(f"行动点: {info['action_points']}/3")
-        print(f"已睡眠: {'是' if info['has_slept'] else '否'}")
+        print(f"⚡ 体力: {info['stamina']}/{info['max_stamina']}")
+        print(f"🎯 行动点: {info['action_points']}/3{time_period_hint}")
+        print(f"😴 已睡眠: {'是' if info['has_slept'] else '否'}")
         print(f"\n💰 货币: {info['inventory']['money']}")
         
         if info['inventory']['items']:
@@ -95,7 +106,17 @@ class VillagerCLI:
             
             if response.status_code == 200:
                 print(f"\n✓ {response.json()['message']}")
-                self.display_villager_info(response.json()['villager'])
+                villager_data = response.json()['villager']
+                self.display_villager_info(villager_data)
+                
+                # 检查行动点
+                if villager_data['action_points'] == 0:
+                    print("\n⚠️  行动点已用完！")
+                    print("   当前时段的工作已完成，你可以：")
+                    print("   1. 进行不消耗行动点的操作（交易、睡眠）")
+                    print("   2. 输入 'advance' 推进到下一个时段")
+                else:
+                    print(f"\n💡 提示: 剩余 {villager_data['action_points']} 个行动点")
             else:
                 print(f"\n✗ {response.json()['message']}")
         except Exception as e:
@@ -148,13 +169,41 @@ class VillagerCLI:
             return "协调器未连接"
     
     def advance_time(self):
-        """推进时间（需要管理员权限）"""
+        """推进时间（全局操作，影响所有村民）"""
         try:
+            # 先显示当前信息
+            current_time = self.get_current_time()
+            print(f"\n当前时间: {current_time}")
+            
+            # 确认推进
+            confirm = input("⚠️  推进时间将影响所有村民！确认推进？(y/n): ").strip().lower()
+            if confirm not in ['y', 'yes', '是']:
+                print("已取消")
+                return
+            
             response = requests.post(f"{self.coordinator_url}/time/advance", timeout=5)
             if response.status_code == 200:
                 data = response.json()
-                print(f"\n✓ {data['message']}")
-                print(f"当前时间: {data['time']['day']}天 {data['time']['time_of_day']}")
+                print(f"\n✓ 时间已推进！")
+                print(f"   {data['message']}")
+                
+                # 显示时段说明
+                time_of_day = data['time']['time_of_day']
+                if time_of_day == 'morning':
+                    print(f"\n🌅 新的一天开始！")
+                    print("   - 所有村民行动点重置为3")
+                    print("   - 每日饥饿扣除10体力")
+                    print("   - 昨晚未睡眠额外扣除20体力")
+                elif time_of_day == 'noon':
+                    print(f"\n☀️  已到中午")
+                elif time_of_day == 'evening':
+                    print(f"\n🌙 已到晚上")
+                    print("   - 可以睡眠恢复体力")
+                    print("   - 有房子睡眠免费，否则需支付10金币租金")
+                
+                # 刷新当前村民信息
+                print(f"\n你的村民状态更新：")
+                self.display_villager_info()
             else:
                 print("\n✗ 时间推进失败")
         except Exception as e:
@@ -190,27 +239,34 @@ class VillagerCLI:
         print("\n基本命令:")
         print("  info / i        - 查看村民状态")
         print("  time / t        - 查看当前时间")
-        print("  advance / a     - 推进时间")
+        print("  advance / a     - 推进时间（全局操作）")
         print("  prices / p      - 查看商人价格")
         print("  help / h / ?    - 显示此帮助")
         print("  quit / q / exit - 退出")
         
         print("\n村民操作:")
         print("  create          - 创建新村民")
-        print("  produce / work  - 执行生产")
-        print("  buy <物品> <数量>   - 从商人购买")
-        print("  sell <物品> <数量>  - 出售给商人")
-        print("  sleep / rest    - 睡眠恢复体力")
+        print("  produce / work  - 执行生产（消耗1行动点）")
+        print("  buy <物品> <数量>   - 从商人购买（不消耗行动点）")
+        print("  sell <物品> <数量>  - 出售给商人（不消耗行动点）")
+        print("  sleep / rest    - 睡眠恢复体力（不消耗行动点）")
         
         print("\n示例:")
         print("  buy seed 5      - 购买5个种子")
         print("  sell wheat 10   - 出售10个小麦")
         print("  produce         - 进行生产")
         
+        print("\n时间系统:")
+        print("  每天有3个时段: 早晨 → 中午 → 晚上")
+        print("  每个时段有3个行动点，只能进行3次生产")
+        print("  交易和睡眠不消耗行动点")
+        print("  当行动点用完时，使用 'advance' 推进到下一时段")
+        print("  ⚠️  推进时间是全局操作，会影响所有村民！")
+        
         print("\n职业生产规则:")
-        print("  farmer (农夫):     1种子 → 5小麦 (消耗20体力)")
-        print("  chef (厨师):       3小麦 → 2面包 (消耗15体力)")
-        print("  carpenter (木工):  10木材 → 1住房 (消耗30体力)")
+        print("  farmer (农夫):     1种子 → 5小麦 (20体力, 1行动点)")
+        print("  chef (厨师):       3小麦 → 2面包 (15体力, 1行动点)")
+        print("  carpenter (木工):  10木材 → 1住房 (30体力, 1行动点)")
         print("="*50)
     
     def run(self):
