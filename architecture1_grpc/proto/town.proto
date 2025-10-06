@@ -1,0 +1,153 @@
+syntax = "proto3";
+
+package town;
+
+// ============ 基础消息类型 ============
+
+message Empty {}
+
+message Status {
+    bool success = 1;
+    string message = 2;
+}
+
+message Inventory {
+    int32 money = 1;
+    map<string, int32> items = 2;
+}
+
+message VillagerInfo {
+    string name = 1;
+    string occupation = 2;
+    string gender = 3;
+    string personality = 4;
+    int32 stamina = 5;
+    int32 max_stamina = 6;
+    Inventory inventory = 7;
+    int32 action_points = 8;
+    bool has_slept = 9;
+}
+
+message GameTime {
+    int32 day = 1;
+    string time_of_day = 2;  // morning, noon, evening
+}
+
+// ============ 时间协调器服务 ============
+
+message RegisterNodeRequest {
+    string node_id = 1;
+    string node_type = 2;  // coordinator, merchant, villager
+    string address = 3;
+}
+
+message TimeAdvanceNotification {
+    GameTime new_time = 1;
+}
+
+service TimeCoordinator {
+    // 注册节点
+    rpc RegisterNode(RegisterNodeRequest) returns (Status);
+    
+    // 获取当前时间
+    rpc GetCurrentTime(Empty) returns (GameTime);
+    
+    // 推进时间（由协调器主动调用各节点）
+    rpc AdvanceTime(Empty) returns (Status);
+    
+    // 获取所有注册节点
+    rpc ListNodes(Empty) returns (NodeList);
+}
+
+message NodeList {
+    repeated NodeInfo nodes = 1;
+}
+
+message NodeInfo {
+    string node_id = 1;
+    string node_type = 2;
+    string address = 3;
+}
+
+// ============ 村民节点服务 ============
+
+message CreateVillagerRequest {
+    string name = 1;
+    string occupation = 2;
+    string gender = 3;
+    string personality = 4;
+}
+
+message ProduceRequest {
+    // 生产请求（根据职业自动判断）
+}
+
+message TradeRequest {
+    string target_node = 1;  // 交易对象节点ID
+    string item = 2;
+    int32 quantity = 3;
+    int32 price = 4;
+}
+
+message SleepRequest {
+    // 睡眠请求
+}
+
+service VillagerNode {
+    // 创建/初始化村民
+    rpc CreateVillager(CreateVillagerRequest) returns (Status);
+    
+    // 获取村民信息
+    rpc GetInfo(Empty) returns (VillagerInfo);
+    
+    // 执行生产
+    rpc Produce(ProduceRequest) returns (Status);
+    
+    // 执行交易
+    rpc Trade(TradeRequest) returns (Status);
+    
+    // 睡眠
+    rpc Sleep(SleepRequest) returns (Status);
+    
+    // 时间推进通知（由协调器调用）
+    rpc OnTimeAdvance(TimeAdvanceNotification) returns (Status);
+}
+
+// ============ 商人节点服务 ============
+
+message BuyFromMerchantRequest {
+    string buyer_id = 1;
+    string item = 2;
+    int32 quantity = 3;
+}
+
+message SellToMerchantRequest {
+    string seller_id = 1;
+    string item = 2;
+    int32 quantity = 3;
+}
+
+message PriceInfo {
+    string item = 1;
+    int32 price = 2;
+}
+
+message PriceList {
+    repeated PriceInfo buy_prices = 1;  // 商人卖给玩家的价格
+    repeated PriceInfo sell_prices = 2;  // 商人从玩家收购的价格
+}
+
+service MerchantNode {
+    // 从商人处购买
+    rpc BuyItem(BuyFromMerchantRequest) returns (Status);
+    
+    // 出售给商人
+    rpc SellItem(SellToMerchantRequest) returns (Status);
+    
+    // 获取价格表
+    rpc GetPrices(Empty) returns (PriceList);
+    
+    // 时间推进通知
+    rpc OnTimeAdvance(TimeAdvanceNotification) returns (Status);
+}
+
