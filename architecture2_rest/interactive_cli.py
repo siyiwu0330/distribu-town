@@ -208,8 +208,11 @@ class VillagerCLI:
                     waiting_for = data.get('waiting_for', [])
                     print(f"\n⏳ {data['message']}")
                     print(f"\n等待以下村民提交行动:")
-                    for node_id in waiting_for:
-                        print(f"   - {node_id}")
+                    for node in waiting_for:
+                        if isinstance(node, dict):
+                            print(f"   - {node['display_name']}")
+                        else:
+                            print(f"   - {node}")
                     print("\n💡 提示: 你可以继续做其他操作（交易等），或者等待...")
             else:
                 print(f"\n✗ 提交失败: {response.json().get('message', '未知错误')}")
@@ -493,17 +496,28 @@ class VillagerCLI:
                 print(f"\n总村民数: {data['total_villagers']}")
                 print(f"已提交: {data['submitted']}/{data['total_villagers']}")
                 
-                if data['pending_actions']:
-                    print(f"\n已提交的行动:")
-                    for node_id, action in data['pending_actions'].items():
-                        print(f"   {node_id}: {action}")
+                # 显示已提交的节点
+                if data.get('submitted_nodes'):
+                    print(f"\n已提交:")
+                    for node in data['submitted_nodes']:
+                        if isinstance(node, dict):
+                            display_name = node['display_name']
+                            action = data['pending_actions'].get(node['node_id'], '未知')
+                            print(f"   ✓ {display_name}: {action}")
+                        else:
+                            print(f"   ✓ {node}")
                 
+                # 显示等待提交的节点
                 if data['waiting_for']:
                     print(f"\n等待提交:")
-                    for node_id in data['waiting_for']:
-                        print(f"   - {node_id}")
+                    for node in data['waiting_for']:
+                        if isinstance(node, dict):
+                            print(f"   - {node['display_name']}")
+                        else:
+                            print(f"   - {node}")
                 else:
-                    print(f"\n✓ 所有村民已提交，时间即将推进")
+                    if data['total_villagers'] > 0:
+                        print(f"\n✓ 所有村民已提交，时间即将推进")
                 
                 print("="*50)
             else:

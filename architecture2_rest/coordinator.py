@@ -165,13 +165,31 @@ def advance_time():
 @app.route('/action/status', methods=['GET'])
 def action_status():
     """查询当前行动提交状态"""
-    villager_nodes = [nid for nid, info in registered_nodes.items() if info['node_type'] == 'villager']
+    villager_nodes = {nid: info for nid, info in registered_nodes.items() if info['node_type'] == 'villager'}
+    
+    submitted = []
+    waiting = []
+    
+    for nid, info in villager_nodes.items():
+        # 构建显示名称：Name (occupation)
+        display_name = nid
+        if info.get('name') and info['name'] != nid:
+            if info.get('occupation'):
+                display_name = f"{info['name']} ({info['occupation']})"
+            else:
+                display_name = info['name']
+        
+        if nid in pending_actions:
+            submitted.append({'node_id': nid, 'display_name': display_name})
+        else:
+            waiting.append({'node_id': nid, 'display_name': display_name})
     
     return jsonify({
         'total_villagers': len(villager_nodes),
-        'submitted': len(pending_actions),
+        'submitted': len(submitted),
+        'submitted_nodes': submitted,
         'pending_actions': pending_actions,
-        'waiting_for': [nid for nid in villager_nodes if nid not in pending_actions],
+        'waiting_for': waiting,
         'ready_to_advance': time_barrier_ready
     })
 
