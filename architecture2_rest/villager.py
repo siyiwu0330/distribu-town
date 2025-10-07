@@ -205,18 +205,54 @@ def trade():
         return jsonify({'success': False, 'message': 'Villager not initialized'}), 400
     
     data = request.json
-    target = data['target']  # 'merchant' or villager node_id
+    target = data['target']  # 'merchant', 'self', or villager node_id
     item = data['item']
     quantity = data['quantity']
-    action = data['action']  # 'buy' or 'sell'
+    action = data['action']  # 'buy', 'sell', 'buy_from_villager', 'sell_to_villager'
     
     # 如果是与商人交易
     if target == 'merchant':
         return trade_with_merchant(item, quantity, action)
+    # 如果是村民间交易的自我处理
+    elif target == 'self':
+        try:
+            price = data.get('price', 0)
+            
+            if action == 'buy_from_villager':
+                # 从其他村民购买：扣钱，加物品
+                if not villager.inventory.remove_money(price):
+                    return jsonify({
+                        'success': False,
+                        'message': f'货币不足 (需要{price})'
+                    }), 400
+                villager.inventory.add_item(item, quantity)
+                print(f"[Villager-{villager_state['node_id']}] 从其他村民购买 {quantity}x {item}, 支付 {price}")
+                
+            elif action == 'sell_to_villager':
+                # 卖给其他村民：扣物品，加钱
+                if not villager.inventory.remove_item(item, quantity):
+                    return jsonify({
+                        'success': False,
+                        'message': f'物品不足'
+                    }), 400
+                villager.inventory.add_money(price)
+                print(f"[Villager-{villager_state['node_id']}] 卖给其他村民 {quantity}x {item}, 获得 {price}")
+            
+            return jsonify({
+                'success': True,
+                'message': 'Trade completed',
+                'villager': villager.to_dict()
+            })
+        
+        except Exception as e:
+            return jsonify({
+                'success': False,
+                'message': f'交易失败: {str(e)}'
+            }), 500
     else:
         return jsonify({
             'success': False,
-            'message': '村民间交易暂未实现'
+            'message': '请使用 trade 命令进行村民间交易'
         }), 400
 
 
@@ -349,6 +385,131 @@ def sleep():
         'message': f'睡眠成功，恢复体力 {SLEEP_STAMINA}。请提交行动等待时间推进',
         'villager': villager.to_dict()
     })
+
+
+@app.route('/trade/request', methods=['POST'])
+def receive_trade_request():
+    """接收来自其他村民的交易请求"""
+    villager = villager_state['villager']
+    
+    if not villager:
+        return jsonify({'success': False, 'message': 'Villager not initialized'}), 400
+    
+    data = request.json
+    from_villager = data['from']
+    item = data['item']
+    quantity = data['quantity']
+    price = data['price']
+    offer_type = data['offer_type']  # 'buy' or 'sell'
+    
+    # 打印交易请求
+    if offer_type == 'buy':
+        print(f"\n[Villager-{villager_state['node_id']}] 收到交易请求:")
+        print(f"  {from_villager} 想购买 {quantity}x {item}, 出价 {price}金币")
+    else:
+        print(f"\n[Villager-{villager_state['node_id']}] 收到交易请求:")
+        print(f"  {from_villager} 想出售 {quantity}x {item}, 要价 {price}金币")
+    
+    # 存储待处理的交易请求
+    if 'pending_trades' not in villager_state:
+        villager_state['pending_trades'] = []
+    
+    trade_id = f"trade_{len(villager_state['pending_trades'])}"
+    villager_state['pending_trades'].append({
+        'trade_id': trade_id,
+        'from': from_villager,
+        'from_address': data['from_address'],
+        'item': item,
+        'quantity': quantity,
+        'price': price,
+        'offer_type': offer_type
+    })
+    
+    return jsonify({
+        'success': True,
+        'message': 'Trade request received',
+        'trade_id': trade_id
+    })
+
+
+@app.route('/trade/accept', methods=['POST'])
+def accept_trade():
+    """接受交易"""
+    data = request.json
+    trade_id = data['trade_id']
+    
+    return jsonify({
+        'success': True,
+        'message': 'Trade accepted'
+    })
+
+
+@app.route('/trade/reject', methods=['POST'])
+def reject_trade():
+    """拒绝交易"""
+    data = request.json
+    trade_id = data['trade_id']
+    
+    return jsonify({
+        'success': True,
+        'message': 'Trade rejected'
+    })
+
+
+@app.route('/trade/complete', methods=['POST'])
+def complete_trade():
+    """完成交易（由发起方调用）"""
+    villager = villager_state['villager']
+    
+    if not villager:
+        return jsonify({'success': False, 'message': 'Villager not initialized'}), 400
+    
+    data = request.json
+    from_node = data['from']
+    item = data['item']
+    quantity = data['quantity']
+    price = data['price']
+    trade_type = data['type']  # 'buy' or 'sell'
+    
+    try:
+        if trade_type == 'buy':
+            # 对方购买我的物品
+            if not villager.inventory.has_item(item, quantity):
+                return jsonify({
+                    'success': False,
+                    'message': f'物品不足: {item} (需要{quantity})'
+                }), 400
+            
+            # 转移物品和金币
+            villager.inventory.remove_item(item, quantity)
+            villager.inventory.add_money(price)
+            
+            print(f"[Villager-{villager_state['node_id']}] 交易完成: 出售 {quantity}x {item} 给 {from_node}, 获得 {price}金币")
+            
+        else:  # sell
+            # 对方出售物品给我
+            if not villager.inventory.remove_money(price):
+                return jsonify({
+                    'success': False,
+                    'message': f'货币不足 (需要{price}, 拥有{villager.inventory.money})'
+                }), 400
+            
+            # 接收物品
+            villager.inventory.add_item(item, quantity)
+            
+            print(f"[Villager-{villager_state['node_id']}] 交易完成: 从 {from_node} 购买 {quantity}x {item}, 支付 {price}金币")
+        
+        return jsonify({
+            'success': True,
+            'message': 'Trade completed',
+            'villager': villager.to_dict()
+        })
+    
+    except Exception as e:
+        return jsonify({
+            'success': False,
+            'message': f'交易失败: {str(e)}'
+        }), 500
 
 
 @app.route('/time/advance', methods=['POST'])
