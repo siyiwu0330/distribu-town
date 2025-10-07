@@ -348,13 +348,58 @@ class VillagerCLI:
                     'quantity': quantity,
                     'price': price,
                     'type': offer_type,
-                    'trade_id': trade_id
+                    'trade_id': trade_id,
+                    'status': 'pending'  # 标记状态
                 }
             else:
                 print(f"\n✗ 发送交易请求失败")
         
         except Exception as e:
             print(f"\n✗ 错误: {e}")
+    
+    def check_my_pending_trade_status(self):
+        """检查自己发起的交易状态"""
+        if not self.pending_trade:
+            return
+        
+        # 如果已经提示过，就不再提示
+        if self.pending_trade.get('status') == 'ready_to_confirm':
+            return
+        
+        try:
+            # 向对方查询交易状态
+            response = requests.get(
+                f"http://{self.pending_trade['target_address']}/trade/pending",
+                timeout=2
+            )
+            
+            if response.status_code == 200:
+                data = response.json()
+                trades = data.get('pending_trades', [])
+                
+                # 查找我们的交易
+                for trade in trades:
+                    if trade['trade_id'] == self.pending_trade['trade_id']:
+                        if trade.get('status') == 'accepted':
+                            # 对方已经接受，提示用户confirm
+                            print("\n" + "="*60)
+                            print("🎉 对方已接受你的交易请求！")
+                            print("="*60)
+                            print(f"交易详情:")
+                            if self.pending_trade['type'] == 'buy':
+                                print(f"  购买 {self.pending_trade['quantity']}x {self.pending_trade['item']}")
+                                print(f"  支付 {self.pending_trade['price']}金币")
+                            else:
+                                print(f"  出售 {self.pending_trade['quantity']}x {self.pending_trade['item']}")
+                                print(f"  获得 {self.pending_trade['price']}金币")
+                            print(f"\n💡 输入 'confirm' 完成交易，或输入 'cancel' 取消")
+                            print("="*60 + "\n")
+                            
+                            # 标记为已提示
+                            self.pending_trade['status'] = 'ready_to_confirm'
+                        break
+        except:
+            pass  # 静默失败
     
     def check_pending_trades(self):
         """查看待处理的交易请求"""
@@ -474,7 +519,7 @@ class VillagerCLI:
                     'item': trade['item'],
                     'quantity': trade['quantity'],
                     'price': trade['price'],
-                    'type': 'sell' if trade['type'] == 'buy' else 'buy'  # 对方的视角相反
+                    'type': trade['type']  # 发起方的type：buy表示对方要卖给我，sell表示对方要买我的
                 },
                 timeout=5
             )
@@ -703,6 +748,9 @@ class VillagerCLI:
         # 主循环
         while True:
             try:
+                # 检查自己发起的交易是否被接受
+                self.check_my_pending_trade_status()
+                
                 cmd = input(f"\n[{self.get_current_time()}] > ").strip().lower()
                 
                 if not cmd:
