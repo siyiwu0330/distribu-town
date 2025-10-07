@@ -272,8 +272,15 @@ class VillagerCLI:
     def trade_with_villager(self, target_node: str, item: str, quantity: int, price: int, offer_type: str):
         """与其他村民交易（点对点）"""
         try:
+            # 获取当前村民信息（包含node_id）
+            my_info = self.get_villager_info()
+            if not my_info:
+                print("\n✗ 请先创建村民")
+                return
+            
+            my_node_id = my_info.get('node_id')
+            
             # 检查是否与自己交易
-            my_node_id = self.node_id
             if target_node == my_node_id:
                 print(f"\n✗ 不能与自己交易！")
                 print("   请选择其他村民节点")
@@ -300,12 +307,7 @@ class VillagerCLI:
                 print("   例如: trade node1 buy wheat 10 100")
                 return
             
-            # 获取当前村民信息
-            my_info = self.get_villager_info()
-            if not my_info:
-                print("\n✗ 请先创建村民")
-                return
-            
+            # 获取当前村民名称（my_info已在前面获取）
             my_name = my_info['name']
             
             # 发送交易请求

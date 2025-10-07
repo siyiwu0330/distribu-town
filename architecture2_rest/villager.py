@@ -107,7 +107,10 @@ def get_villager_info():
             'message': 'Villager not initialized'
         }), 400
     
-    return jsonify(villager_state['villager'].to_dict())
+    # 返回村民信息，包含节点ID
+    villager_data = villager_state['villager'].to_dict()
+    villager_data['node_id'] = villager_state['node_id']
+    return jsonify(villager_data)
 
 
 def _submit_action_internal(action: str) -> dict:
