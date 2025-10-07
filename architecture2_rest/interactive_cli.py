@@ -272,6 +272,13 @@ class VillagerCLI:
     def trade_with_villager(self, target_node: str, item: str, quantity: int, price: int, offer_type: str):
         """与其他村民交易（点对点）"""
         try:
+            # 检查是否与自己交易
+            my_node_id = self.node_id
+            if target_node == my_node_id:
+                print(f"\n✗ 不能与自己交易！")
+                print("   请选择其他村民节点")
+                return
+            
             # 获取所有村民节点
             villagers = self.get_all_villagers()
             
@@ -287,7 +294,8 @@ class VillagerCLI:
                 print(f"\n✗ 找不到村民节点: {target_node}")
                 print(f"\n可用的村民:")
                 for nid, info in villagers.items():
-                    print(f"   {nid}: {info['display_name']}")
+                    if nid != my_node_id:  # 不显示自己
+                        print(f"   {nid}: {info['display_name']}")
                 print("\n💡 提示: 使用节点ID")
                 print("   例如: trade node1 buy wheat 10 100")
                 return
@@ -498,16 +506,22 @@ class VillagerCLI:
                         timeout=5
                     )
                 
-                print(f"\n✓ 交易完成！")
-                if trade['type'] == 'buy':
-                    print(f"  你从 {trade['target']} 购买了 {trade['quantity']}x {trade['item']}")
-                    print(f"  支付: {trade['price']}金币")
+                # 检查自己的状态更新是否成功
+                if result.status_code == 200:
+                    print(f"\n✓ 交易完成！")
+                    if trade['type'] == 'buy':
+                        print(f"  你从 {trade['target']} 购买了 {trade['quantity']}x {trade['item']}")
+                        print(f"  支付: {trade['price']}金币")
+                    else:
+                        print(f"  你向 {trade['target']} 出售了 {trade['quantity']}x {trade['item']}")
+                        print(f"  获得: {trade['price']}金币")
+                    
+                    self.display_villager_info()
+                    self.pending_trade = None
                 else:
-                    print(f"  你向 {trade['target']} 出售了 {trade['quantity']}x {trade['item']}")
-                    print(f"  获得: {trade['price']}金币")
-                
-                self.display_villager_info()
-                self.pending_trade = None
+                    result_data = result.json()
+                    print(f"\n✗ 交易失败: {result_data.get('message', '未知错误')}")
+                    print("   交易已取消")
             else:
                 error_msg = response.json().get('message', '未知错误')
                 print(f"\n✗ 交易失败: {error_msg}")
@@ -537,8 +551,9 @@ class VillagerCLI:
                     for node in data['submitted_nodes']:
                         if isinstance(node, dict):
                             display_name = node['display_name']
+                            node_id = node['node_id']
                             action = data['pending_actions'].get(node['node_id'], '未知')
-                            print(f"   ✓ {display_name}: {action}")
+                            print(f"   ✓ [{node_id}] {display_name}: {action}")
                         else:
                             print(f"   ✓ {node}")
                 
@@ -547,7 +562,9 @@ class VillagerCLI:
                     print(f"\n等待提交:")
                     for node in data['waiting_for']:
                         if isinstance(node, dict):
-                            print(f"   - {node['display_name']}")
+                            node_id = node['node_id']
+                            display_name = node['display_name']
+                            print(f"   - [{node_id}] {display_name}")
                         else:
                             print(f"   - {node}")
                 else:
