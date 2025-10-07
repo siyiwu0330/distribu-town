@@ -185,7 +185,8 @@ def run_test_scenario():
         response = requests.get(f'http://localhost:{port}/villager')
         if response.status_code == 200:
             data = response.json()
-            print(f"{data['name']}: 体力{data['stamina']}, 行动点{data['action_points']}, 货币{data['inventory']['money']}")
+            action_status = "已提交" if data.get('has_submitted_action', False) else "未提交"
+            print(f"{data['name']}: 体力{data['stamina']}, 行动{action_status}, 货币{data['inventory']['money']}")
     print()
     
     # 获取商人价格表
