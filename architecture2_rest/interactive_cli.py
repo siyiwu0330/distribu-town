@@ -71,16 +71,12 @@ class VillagerCLI:
             print("\n村民未初始化")
             return
         
-        # 根据行动点显示时段提示
-        time_period_hint = ""
-        if info['action_points'] == 3:
-            time_period_hint = " [早晨 - 新时段开始]"
-        elif info['action_points'] == 2:
-            time_period_hint = " [已工作1次]"
-        elif info['action_points'] == 1:
-            time_period_hint = " [已工作2次]"
-        elif info['action_points'] == 0:
-            time_period_hint = " [⚠️ 行动点用完，建议推进时间]"
+        # 根据行动状态显示提示
+        action_status = ""
+        if info.get('has_submitted_action', False):
+            action_status = " [已提交，等待时间推进]"
+        else:
+            action_status = " [可以行动：工作/睡眠/空闲]"
         
         print("\n" + "="*50)
         print(f"  {info['name']} - {info['occupation']}")
@@ -88,7 +84,7 @@ class VillagerCLI:
         print(f"性别: {info['gender']}")
         print(f"性格: {info['personality']}")
         print(f"⚡ 体力: {info['stamina']}/{info['max_stamina']}")
-        print(f"🎯 行动点: {info['action_points']}/3{time_period_hint}")
+        print(f"🎯 行动状态: {'已提交' if info.get('has_submitted_action', False) else '未提交'}{action_status}")
         print(f"😴 已睡眠: {'是' if info['has_slept'] else '否'}")
         print(f"\n💰 货币: {info['inventory']['money']}")
         
