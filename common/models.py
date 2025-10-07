@@ -102,7 +102,7 @@ class Villager:
     stamina: int = 100  # 体力
     max_stamina: int = 100
     inventory: Inventory = field(default_factory=Inventory)
-    action_points: int = 1  # 当前时段的行动点数（每时段1点）
+    has_submitted_action: bool = False  # 当前时段是否已提交行动
     has_slept: bool = False  # 当天是否已睡眠
     
     def consume_stamina(self, amount: int) -> bool:
@@ -116,20 +116,13 @@ class Villager:
         """恢复体力"""
         self.stamina = min(self.stamina + amount, self.max_stamina)
     
-    def consume_action_point(self) -> bool:
-        """消耗行动点"""
-        if self.action_points <= 0:
-            return False
-        self.action_points -= 1
-        return True
-    
-    def refresh_action_point(self):
-        """刷新行动点（每时段调用）"""
-        self.action_points = 1
+    def reset_time_period(self):
+        """重置时段状态（每次时间推进时调用）"""
+        self.has_submitted_action = False
     
     def reset_daily(self):
         """每日重置"""
-        self.action_points = 1
+        self.has_submitted_action = False
         self.has_slept = False
         # 饥饿扣除体力
         self.stamina = max(0, self.stamina - 10)
@@ -155,7 +148,7 @@ class Villager:
             "stamina": self.stamina,
             "max_stamina": self.max_stamina,
             "inventory": self.inventory.to_dict(),
-            "action_points": self.action_points,
+            "has_submitted_action": self.has_submitted_action,
             "has_slept": self.has_slept
         }
     
@@ -173,7 +166,7 @@ class Villager:
             stamina=data.get("stamina", 100),
             max_stamina=data.get("max_stamina", 100),
             inventory=Inventory.from_dict(data.get("inventory", {})),
-            action_points=data.get("action_points", 3),
+            has_submitted_action=data.get("has_submitted_action", False),
             has_slept=data.get("has_slept", False)
         )
         return villager

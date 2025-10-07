@@ -110,16 +110,15 @@ def get_villager_info():
     return jsonify(villager_state['villager'].to_dict())
 
 
-@app.route('/action/submit', methods=['POST'])
-def submit_action():
-    """提交行动到协调器（同步屏障）"""
+def _submit_action_internal(action: str) -> dict:
+    """内部函数：提交行动到协调器（同步屏障）"""
     villager = villager_state['villager']
     
     if not villager:
-        return jsonify({'success': False, 'message': 'Villager not initialized'}), 400
+        return {'success': False, 'message': 'Villager not initialized'}
     
-    data = request.json
-    action = data.get('action', 'idle')  # work, sleep, idle
+    # 标记已提交行动
+    villager.has_submitted_action = True
     
     # 提交到协调器
     try:
@@ -138,41 +137,79 @@ def submit_action():
             
             if result.get('all_ready'):
                 # 所有人都准备好了，时间已推进
-                return jsonify({
+                return {
                     'success': True,
                     'message': '所有村民已准备就绪，时间已推进！',
                     'all_ready': True,
-                    'new_time': result.get('new_time'),
-                    'villager': villager.to_dict()
-                })
+                    'new_time': result.get('new_time')
+                }
             else:
                 # 还在等待其他人
                 waiting_for = result.get('waiting_for', [])
-                return jsonify({
+                return {
                     'success': True,
-                    'message': f"已提交行动，等待其他村民: {', '.join(waiting_for)}",
+                    'message': f"已提交'{action}'行动，等待其他村民",
                     'all_ready': False,
-                    'waiting_for': waiting_for,
-                    'villager': villager.to_dict()
-                })
+                    'waiting_for': waiting_for
+                }
         else:
-            return jsonify({'success': False, 'message': '提交行动失败'}), 500
+            return {'success': False, 'message': f'协调器返回错误: {response.status_code}'}
     
     except Exception as e:
-        return jsonify({'success': False, 'message': f'提交失败: {str(e)}'}), 500
+        return {'success': False, 'message': f'提交失败: {str(e)}'}
 
 
-@app.route('/action/produce', methods=['POST'])
-def produce():
-    """执行生产"""
+@app.route('/action/submit', methods=['POST'])
+def submit_action():
+    """提交行动到协调器（同步屏障）"""
     villager = villager_state['villager']
     
     if not villager:
         return jsonify({'success': False, 'message': 'Villager not initialized'}), 400
     
-    # 检查是否有行动点
-    if villager.action_points <= 0:
-        return jsonify({'success': False, 'message': '没有行动点了，请提交行动等待时间推进'}), 400
+    # 检查是否已提交
+    if villager.has_submitted_action:
+        return jsonify({'success': False, 'message': '当前时段已经提交过行动'}), 400
+    
+    data = request.json
+    action = data.get('action', 'idle')  # work, sleep, idle
+    
+    result = _submit_action_internal(action)
+    
+    if result['success']:
+        if result.get('all_ready'):
+            return jsonify({
+                'success': True,
+                'message': result['message'],
+                'all_ready': True,
+                'new_time': result.get('new_time'),
+                'villager': villager.to_dict()
+            })
+        else:
+            # 还在等待其他人
+            waiting_for = result.get('waiting_for', [])
+            return jsonify({
+                'success': True,
+                'message': result['message'],
+                'all_ready': False,
+                'waiting_for': waiting_for,
+                'villager': villager.to_dict()
+            })
+    else:
+        return jsonify({'success': False, 'message': result.get('message', '提交行动失败')}), 500
+
+
+@app.route('/action/produce', methods=['POST'])
+def produce():
+    """执行生产（完成后自动提交work）"""
+    villager = villager_state['villager']
+    
+    if not villager:
+        return jsonify({'success': False, 'message': 'Villager not initialized'}), 400
+    
+    # 检查当前时段是否已提交行动
+    if villager.has_submitted_action:
+        return jsonify({'success': False, 'message': '当前时段已经提交过行动，请等待时间推进'}), 400
     
     # 获取生产配方
     recipe = PRODUCTION_RECIPES.get(villager.occupation)
@@ -203,19 +240,21 @@ def produce():
         villager.inventory.remove_item(item, quantity)
     
     villager.consume_stamina(recipe.stamina_cost)
-    villager.consume_action_point()
     
     # 生产产出
     villager.inventory.add_item(recipe.output_item, recipe.output_quantity)
     
     print(f"[Villager-{villager_state['node_id']}] {villager.name} 生产了 {recipe.output_quantity}x {recipe.output_item}")
     print(f"  消耗体力: {recipe.stamina_cost}, 剩余: {villager.stamina}")
-    print(f"  剩余行动点: {villager.action_points}")
+    
+    # 自动提交work行动
+    submit_result = _submit_action_internal('work')
     
     return jsonify({
         'success': True,
-        'message': f"生产成功: {recipe.output_quantity}x {recipe.output_item}",
-        'villager': villager.to_dict()
+        'message': f"生产成功: {recipe.output_quantity}x {recipe.output_item}。{submit_result.get('message', '')}",
+        'villager': villager.to_dict(),
+        'submit_result': submit_result
     })
 
 
@@ -373,11 +412,15 @@ def trade_with_merchant(item, quantity, action):
 
 @app.route('/action/sleep', methods=['POST'])
 def sleep():
-    """睡眠（准备睡眠，实际在时间推进时执行）"""
+    """睡眠（完成后自动提交sleep）"""
     villager = villager_state['villager']
     
     if not villager:
         return jsonify({'success': False, 'message': 'Villager not initialized'}), 400
+    
+    # 检查当前时段是否已提交行动
+    if villager.has_submitted_action:
+        return jsonify({'success': False, 'message': '当前时段已经提交过行动，请等待时间推进'}), 400
     
     if villager.has_slept:
         return jsonify({'success': False, 'message': '今天已经睡过了'}), 400
@@ -410,10 +453,14 @@ def sleep():
     print(f"[Villager-{villager_state['node_id']}] {villager.name} {sleep_message}，恢复体力 {SLEEP_STAMINA}")
     print(f"  当前体力: {villager.stamina}/{villager.max_stamina}")
     
+    # 自动提交sleep行动
+    submit_result = _submit_action_internal('sleep')
+    
     return jsonify({
         'success': True,
-        'message': f'睡眠成功，恢复体力 {SLEEP_STAMINA}。{sleep_message}。请提交行动等待时间推进',
-        'villager': villager.to_dict()
+        'message': f'睡眠成功，恢复体力 {SLEEP_STAMINA}。{sleep_message}。{submit_result.get("message", "")}',
+        'villager': villager.to_dict(),
+        'submit_result': submit_result
     })
 
 
@@ -662,13 +709,13 @@ def on_time_advance():
         villager.reset_daily()
         print(f"[Villager-{villager_state['node_id']}] 新的一天！")
         print(f"  体力: {villager.stamina}/{villager.max_stamina}")
-        print(f"  行动点: {villager.action_points}")
     else:
-        # 每个时段刷新行动点
-        villager.refresh_action_point()
-        print(f"[Villager-{villager_state['node_id']}] 行动点已刷新")
+        # 每个时段重置行动状态
+        villager.reset_time_period()
+        print(f"[Villager-{villager_state['node_id']}] 进入新时段")
         print(f"  当前时段: {data['time_of_day']}")
-        print(f"  行动点: {villager.action_points}")
+    
+    print(f"  可以开始新的行动（工作/睡眠/空闲）")
     
     return jsonify({'success': True, 'message': 'Time updated'})
 

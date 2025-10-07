@@ -101,24 +101,26 @@ class VillagerCLI:
         print("="*50)
     
     def produce(self):
-        """生产"""
+        """生产（自动提交work）"""
         try:
             response = requests.post(f"{self.villager_url}/action/produce", timeout=5)
             
             if response.status_code == 200:
-                print(f"\n✓ {response.json()['message']}")
-                villager_data = response.json()['villager']
-                self.display_villager_info(villager_data)
+                data = response.json()
+                print(f"\n✓ {data['message']}")
                 
-                # 检查行动点
-                if villager_data['action_points'] == 0:
-                    print("\n⚠️  行动点已用完！")
-                    print("   当前时段的工作已完成，你可以：")
-                    print("   1. 进行不消耗行动点的操作（交易、睡眠）")
-                    print("   2. 输入 'submit work' 提交本时段行动")
-                else:
-                    print(f"\n💡 提示: 剩余 {villager_data['action_points']} 个行动点")
-                    print(f"   完成工作后使用 'submit work' 提交行动")
+                # 显示提交结果
+                submit_result = data.get('submit_result', {})
+                if submit_result.get('all_ready'):
+                    print("\n🎉 所有村民已准备就绪，时间已推进！")
+                    print(f"   新时间: {submit_result.get('new_time', {})}")
+                elif submit_result.get('waiting_for'):
+                    waiting_for = submit_result.get('waiting_for', [])
+                    print(f"\n⏳ 已自动提交'work'行动，等待其他村民")
+                    print(f"   等待中: {len(waiting_for)} 个村民")
+                
+                villager_data = data['villager']
+                self.display_villager_info(villager_data)
             else:
                 print(f"\n✗ {response.json()['message']}")
         except Exception as e:
@@ -147,13 +149,26 @@ class VillagerCLI:
             print(f"\n✗ 错误: {e}")
     
     def sleep(self):
-        """睡眠"""
+        """睡眠（自动提交sleep）"""
         try:
             response = requests.post(f"{self.villager_url}/action/sleep", timeout=5)
             
             if response.status_code == 200:
-                print(f"\n✓ {response.json()['message']}")
-                self.display_villager_info(response.json()['villager'])
+                data = response.json()
+                print(f"\n✓ {data['message']}")
+                
+                # 显示提交结果
+                submit_result = data.get('submit_result', {})
+                if submit_result.get('all_ready'):
+                    print("\n🎉 所有村民已准备就绪，时间已推进！")
+                    print(f"   新时间: {submit_result.get('new_time', {})}")
+                elif submit_result.get('waiting_for'):
+                    waiting_for = submit_result.get('waiting_for', [])
+                    print(f"\n⏳ 已自动提交'sleep'行动，等待其他村民")
+                    print(f"   等待中: {len(waiting_for)} 个村民")
+                
+                villager_data = data['villager']
+                self.display_villager_info(villager_data)
             else:
                 print(f"\n✗ {response.json()['message']}")
         except Exception as e:
@@ -586,11 +601,12 @@ class VillagerCLI:
         
         print("\n村民操作:")
         print("  create          - 创建新村民")
-        print("  produce / work  - 执行生产（消耗1行动点）")
-        print("  buy <物品> <数量>   - 从商人购买（不消耗行动点）")
-        print("  sell <物品> <数量>  - 出售给商人（不消耗行动点）")
-        print("  sleep / rest    - 睡眠恢复体力（不消耗行动点）")
-        print("  eat / e         - 吃面包恢复体力（消耗1个面包，恢复30体力）")
+        print("  produce / work  - 执行生产（自动提交work）")
+        print("  sleep / rest    - 睡眠恢复体力（自动提交sleep）")
+        print("  idle            - 跳过当前时段（提交idle）")
+        print("  eat / e         - 吃面包恢复体力（不消耗行动，不提交）")
+        print("  buy <物品> <数量>   - 从商人购买")
+        print("  sell <物品> <数量>  - 出售给商人")
         
         print("\n村民间交易（P2P，不经过协调器）:")
         print("  trade <村民> buy <物品> <数量> <价格>  - 向其他村民购买")
@@ -607,26 +623,27 @@ class VillagerCLI:
         print("        confirm                      → 发起方完成交易")
         
         print("\n时间同步系统:")
-        print("  submit work     - 提交'工作'行动（完成生产后）")
-        print("  submit sleep    - 提交'睡眠'行动（睡眠后）")
-        print("  submit idle     - 提交'空闲'行动（什么都不做）")
-        print("  ")
+        print("  ⚠️  每个时段只能做一个主要行动（工作/睡眠/空闲）")
         print("  ⚠️  只有所有村民都提交行动后，时间才会推进！")
         print("  这是一个分布式同步屏障（Barrier Synchronization）")
         print("  ")
-        print("  💡 行动点机制：每个时段（早中晚）有1个行动点")
-        print("     时间推进到下一时段时自动刷新1点")
+        print("  💡 produce和sleep会自动提交行动")
+        print("  💡 如果想跳过当前时段，使用 'idle' 命令")
+        print("  💡 交易和吃饭不消耗行动，可以随时进行")
         
         print("\n示例工作流（早上）:")
-        print("  buy seed 1      → 购买种子")
-        print("  produce         → 生产小麦（消耗1行动点）")
-        print("  submit work     → 提交行动，等待其他村民")
-        print("  [等待...]       → 时间推进到中午，行动点刷新为1")
+        print("  buy seed 1      → 购买种子（不消耗行动）")
+        print("  produce         → 生产小麦（自动提交work）")
+        print("  [等待...]       → 其他村民也提交后，时间推进到中午")
         print("  ")
         print("  中午:")
-        print("  produce         → 再次生产（消耗1行动点）")
-        print("  eat             → 吃面包恢复体力")
-        print("  submit work     → 提交，等待推进到晚上")
+        print("  eat             → 吃面包恢复体力（不消耗行动）")
+        print("  produce         → 再次生产（自动提交work）")
+        print("  [等待...]       → 时间推进到晚上")
+        print("  ")
+        print("  晚上:")
+        print("  sleep           → 睡眠（自动提交sleep）")
+        print("  [等待...]       → 时间推进到第二天早上")
         
         print("\n职业生产规则:")
         print("  farmer (农夫):     1种子 → 5小麦 (20体力, 1行动点)")
@@ -700,14 +717,9 @@ class VillagerCLI:
                 elif command in ['status', 's']:
                     self.check_action_status()
                 
-                # 提交行动
-                elif command == 'submit' and len(parts) >= 2:
-                    action_type = parts[1]
-                    if action_type in ['work', 'sleep', 'idle']:
-                        self.submit_action(action_type)
-                    else:
-                        print(f"\n✗ 无效的行动类型: {action_type}")
-                        print("   有效选项: work, sleep, idle")
+                # 提交空闲行动（跳过当前时段）
+                elif command == 'idle' or (command == 'submit' and len(parts) >= 2 and parts[1] == 'idle'):
+                    self.submit_action('idle')
                 
                 # 价格表
                 elif command in ['prices', 'p']:
