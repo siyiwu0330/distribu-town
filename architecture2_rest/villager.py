@@ -87,6 +87,58 @@ def get_villager_info():
     return jsonify(villager_state['villager'].to_dict())
 
 
+@app.route('/action/submit', methods=['POST'])
+def submit_action():
+    """提交行动到协调器（同步屏障）"""
+    villager = villager_state['villager']
+    
+    if not villager:
+        return jsonify({'success': False, 'message': 'Villager not initialized'}), 400
+    
+    data = request.json
+    action = data.get('action', 'idle')  # work, sleep, idle
+    
+    # 提交到协调器
+    try:
+        coordinator_addr = villager_state['coordinator_address']
+        response = requests.post(
+            f"http://{coordinator_addr}/action/submit",
+            json={
+                'node_id': villager_state['node_id'],
+                'action': action
+            },
+            timeout=5
+        )
+        
+        if response.status_code == 200:
+            result = response.json()
+            
+            if result.get('all_ready'):
+                # 所有人都准备好了，时间已推进
+                return jsonify({
+                    'success': True,
+                    'message': '所有村民已准备就绪，时间已推进！',
+                    'all_ready': True,
+                    'new_time': result.get('new_time'),
+                    'villager': villager.to_dict()
+                })
+            else:
+                # 还在等待其他人
+                waiting_for = result.get('waiting_for', [])
+                return jsonify({
+                    'success': True,
+                    'message': f"已提交行动，等待其他村民: {', '.join(waiting_for)}",
+                    'all_ready': False,
+                    'waiting_for': waiting_for,
+                    'villager': villager.to_dict()
+                })
+        else:
+            return jsonify({'success': False, 'message': '提交行动失败'}), 500
+    
+    except Exception as e:
+        return jsonify({'success': False, 'message': f'提交失败: {str(e)}'}), 500
+
+
 @app.route('/action/produce', methods=['POST'])
 def produce():
     """执行生产"""
@@ -97,7 +149,7 @@ def produce():
     
     # 检查是否有行动点
     if villager.action_points <= 0:
-        return jsonify({'success': False, 'message': '没有行动点了'}), 400
+        return jsonify({'success': False, 'message': '没有行动点了，请提交行动等待时间推进'}), 400
     
     # 获取生产配方
     recipe = PRODUCTION_RECIPES.get(villager.occupation)
@@ -262,7 +314,7 @@ def trade_with_merchant(item, quantity, action):
 
 @app.route('/action/sleep', methods=['POST'])
 def sleep():
-    """睡眠"""
+    """睡眠（准备睡眠，实际在时间推进时执行）"""
     villager = villager_state['villager']
     
     if not villager:
@@ -271,19 +323,21 @@ def sleep():
     if villager.has_slept:
         return jsonify({'success': False, 'message': '今天已经睡过了'}), 400
     
-    # 检查是否有房子
+    # 检查是否有房子或足够的钱租房
     has_house = villager.inventory.has_item("house", 1)
     
     if not has_house:
-        # 需要租房
-        if not villager.inventory.remove_money(RENT_COST):
+        if villager.inventory.money < RENT_COST:
             return jsonify({
                 'success': False,
-                'message': f'没有房子且货币不足支付租金 (需要{RENT_COST})'
+                'message': f'没有房子且货币不足支付租金 (需要{RENT_COST}，拥有{villager.inventory.money})'
             }), 400
+    
+    # 预处理睡眠（扣费和恢复在这里执行）
+    if not has_house:
+        villager.inventory.remove_money(RENT_COST)
         print(f"[Villager-{villager_state['node_id']}] {villager.name} 支付租金 {RENT_COST}")
     
-    # 恢复体力
     villager.restore_stamina(SLEEP_STAMINA)
     villager.has_slept = True
     
@@ -292,7 +346,7 @@ def sleep():
     
     return jsonify({
         'success': True,
-        'message': f'睡眠成功，恢复体力 {SLEEP_STAMINA}',
+        'message': f'睡眠成功，恢复体力 {SLEEP_STAMINA}。请提交行动等待时间推进',
         'villager': villager.to_dict()
     })
 

@@ -114,9 +114,10 @@ class VillagerCLI:
                     print("\n⚠️  行动点已用完！")
                     print("   当前时段的工作已完成，你可以：")
                     print("   1. 进行不消耗行动点的操作（交易、睡眠）")
-                    print("   2. 输入 'advance' 推进到下一个时段")
+                    print("   2. 输入 'submit work' 提交本时段行动")
                 else:
                     print(f"\n💡 提示: 剩余 {villager_data['action_points']} 个行动点")
+                    print(f"   完成工作后使用 'submit work' 提交行动")
             else:
                 print(f"\n✗ {response.json()['message']}")
         except Exception as e:
@@ -168,44 +169,80 @@ class VillagerCLI:
         except:
             return "协调器未连接"
     
-    def advance_time(self):
-        """推进时间（全局操作，影响所有村民）"""
+    def submit_action(self, action_type: str):
+        """提交行动到协调器（同步屏障）"""
         try:
-            # 先显示当前信息
-            current_time = self.get_current_time()
-            print(f"\n当前时间: {current_time}")
+            response = requests.post(
+                f"{self.villager_url}/action/submit",
+                json={'action': action_type},
+                timeout=10  # 延长超时，因为可能要等待其他人
+            )
             
-            # 确认推进
-            confirm = input("⚠️  推进时间将影响所有村民！确认推进？(y/n): ").strip().lower()
-            if confirm not in ['y', 'yes', '是']:
-                print("已取消")
-                return
-            
-            response = requests.post(f"{self.coordinator_url}/time/advance", timeout=5)
             if response.status_code == 200:
                 data = response.json()
-                print(f"\n✓ 时间已推进！")
-                print(f"   {data['message']}")
                 
-                # 显示时段说明
-                time_of_day = data['time']['time_of_day']
-                if time_of_day == 'morning':
-                    print(f"\n🌅 新的一天开始！")
-                    print("   - 所有村民行动点重置为3")
-                    print("   - 每日饥饿扣除10体力")
-                    print("   - 昨晚未睡眠额外扣除20体力")
-                elif time_of_day == 'noon':
-                    print(f"\n☀️  已到中午")
-                elif time_of_day == 'evening':
-                    print(f"\n🌙 已到晚上")
-                    print("   - 可以睡眠恢复体力")
-                    print("   - 有房子睡眠免费，否则需支付10金币租金")
-                
-                # 刷新当前村民信息
-                print(f"\n你的村民状态更新：")
-                self.display_villager_info()
+                if data.get('all_ready'):
+                    # 所有人都准备好了，时间已推进
+                    print(f"\n✓ {data['message']}")
+                    
+                    # 显示新时间
+                    new_time = data.get('new_time', {})
+                    time_of_day = new_time.get('time_of_day', '')
+                    
+                    if time_of_day == 'morning':
+                        print(f"\n🌅 新的一天开始！")
+                        print("   - 所有村民行动点重置为3")
+                        print("   - 每日饥饿扣除10体力")
+                    elif time_of_day == 'noon':
+                        print(f"\n☀️  已到中午")
+                    elif time_of_day == 'evening':
+                        print(f"\n🌙 已到晚上")
+                        print("   - 可以睡眠恢复体力")
+                    
+                    # 显示更新后的村民状态
+                    print("\n你的村民状态：")
+                    self.display_villager_info()
+                else:
+                    # 还在等待其他人
+                    waiting_for = data.get('waiting_for', [])
+                    print(f"\n⏳ {data['message']}")
+                    print(f"\n等待以下村民提交行动:")
+                    for node_id in waiting_for:
+                        print(f"   - {node_id}")
+                    print("\n💡 提示: 你可以继续做其他操作（交易等），或者等待...")
             else:
-                print("\n✗ 时间推进失败")
+                print(f"\n✗ 提交失败: {response.json().get('message', '未知错误')}")
+        except Exception as e:
+            print(f"\n✗ 错误: {e}")
+    
+    def check_action_status(self):
+        """查看当前行动提交状态"""
+        try:
+            response = requests.get(f"{self.coordinator_url}/action/status", timeout=5)
+            if response.status_code == 200:
+                data = response.json()
+                
+                print("\n" + "="*50)
+                print("  行动提交状态")
+                print("="*50)
+                print(f"\n总村民数: {data['total_villagers']}")
+                print(f"已提交: {data['submitted']}/{data['total_villagers']}")
+                
+                if data['pending_actions']:
+                    print(f"\n已提交的行动:")
+                    for node_id, action in data['pending_actions'].items():
+                        print(f"   {node_id}: {action}")
+                
+                if data['waiting_for']:
+                    print(f"\n等待提交:")
+                    for node_id in data['waiting_for']:
+                        print(f"   - {node_id}")
+                else:
+                    print(f"\n✓ 所有村民已提交，时间即将推进")
+                
+                print("="*50)
+            else:
+                print("\n✗ 无法获取状态")
         except Exception as e:
             print(f"\n✗ 错误: {e}")
     
@@ -239,7 +276,7 @@ class VillagerCLI:
         print("\n基本命令:")
         print("  info / i        - 查看村民状态")
         print("  time / t        - 查看当前时间")
-        print("  advance / a     - 推进时间（全局操作）")
+        print("  status / s      - 查看所有村民的提交状态")
         print("  prices / p      - 查看商人价格")
         print("  help / h / ?    - 显示此帮助")
         print("  quit / q / exit - 退出")
@@ -251,17 +288,21 @@ class VillagerCLI:
         print("  sell <物品> <数量>  - 出售给商人（不消耗行动点）")
         print("  sleep / rest    - 睡眠恢复体力（不消耗行动点）")
         
-        print("\n示例:")
-        print("  buy seed 5      - 购买5个种子")
-        print("  sell wheat 10   - 出售10个小麦")
-        print("  produce         - 进行生产")
+        print("\n时间同步系统:")
+        print("  submit work     - 提交'工作'行动（完成生产后）")
+        print("  submit sleep    - 提交'睡眠'行动（睡眠后）")
+        print("  submit idle     - 提交'空闲'行动（什么都不做）")
+        print("  ")
+        print("  ⚠️  只有所有村民都提交行动后，时间才会推进！")
+        print("  这是一个分布式同步屏障（Barrier Synchronization）")
         
-        print("\n时间系统:")
-        print("  每天有3个时段: 早晨 → 中午 → 晚上")
-        print("  每个时段有3个行动点，只能进行3次生产")
-        print("  交易和睡眠不消耗行动点")
-        print("  当行动点用完时，使用 'advance' 推进到下一时段")
-        print("  ⚠️  推进时间是全局操作，会影响所有村民！")
+        print("\n示例工作流:")
+        print("  buy seed 5      → 购买种子")
+        print("  produce         → 生产小麦")
+        print("  produce         → 再次生产")
+        print("  produce         → 第三次生产")
+        print("  submit work     → 提交行动，等待其他村民")
+        print("  [等待...]       → 其他村民也提交后，时间自动推进")
         
         print("\n职业生产规则:")
         print("  farmer (农夫):     1种子 → 5小麦 (20体力, 1行动点)")
@@ -324,9 +365,18 @@ class VillagerCLI:
                 elif command in ['time', 't']:
                     print(f"\n当前时间: {self.get_current_time()}")
                 
-                # 推进时间
-                elif command in ['advance', 'a']:
-                    self.advance_time()
+                # 查看提交状态
+                elif command in ['status', 's']:
+                    self.check_action_status()
+                
+                # 提交行动
+                elif command == 'submit' and len(parts) >= 2:
+                    action_type = parts[1]
+                    if action_type in ['work', 'sleep', 'idle']:
+                        self.submit_action(action_type)
+                    else:
+                        print(f"\n✗ 无效的行动类型: {action_type}")
+                        print("   有效选项: work, sleep, idle")
                 
                 # 价格表
                 elif command in ['prices', 'p']:

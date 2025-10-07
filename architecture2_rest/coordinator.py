@@ -16,6 +16,8 @@ app = Flask(__name__)
 # 全局状态
 game_state = GameState()
 registered_nodes = {}  # {node_id: {node_type, address}}
+pending_actions = {}   # {node_id: action_type}  - 等待提交的行动
+time_barrier_ready = False  # 是否所有节点都准备好推进时间
 
 
 @app.route('/health', methods=['GET'])
@@ -52,10 +54,54 @@ def get_current_time():
     return jsonify(game_state.to_dict())
 
 
-@app.route('/time/advance', methods=['POST'])
-def advance_time():
-    """推进时间"""
-    global game_state
+@app.route('/action/submit', methods=['POST'])
+def submit_action():
+    """村民提交当前时段的行动"""
+    global pending_actions, time_barrier_ready
+    
+    data = request.json
+    node_id = data['node_id']
+    action_type = data['action']  # 'work', 'sleep', 'idle'
+    
+    # 记录行动
+    pending_actions[node_id] = action_type
+    
+    print(f"\n[Coordinator] {node_id} 提交行动: {action_type}")
+    print(f"[Coordinator] 已提交: {len(pending_actions)}/{len([n for n in registered_nodes.values() if n['node_type'] == 'villager'])}")
+    
+    # 检查是否所有村民节点都已提交
+    villager_nodes = [nid for nid, info in registered_nodes.items() if info['node_type'] == 'villager']
+    all_submitted = all(nid in pending_actions for nid in villager_nodes)
+    
+    if all_submitted and len(villager_nodes) > 0:
+        print(f"[Coordinator] ✓ 所有村民已提交行动，准备推进时间")
+        time_barrier_ready = True
+        
+        # 自动推进时间
+        result = _advance_time_internal()
+        
+        return jsonify({
+            'success': True,
+            'message': '行动已提交，时间即将推进',
+            'all_ready': True,
+            'time_advanced': True,
+            'new_time': game_state.to_dict()
+        })
+    else:
+        waiting_for = [nid for nid in villager_nodes if nid not in pending_actions]
+        print(f"[Coordinator] 等待其他村民: {waiting_for}")
+        
+        return jsonify({
+            'success': True,
+            'message': f'行动已提交，等待其他村民 ({len(pending_actions)}/{len(villager_nodes)})',
+            'all_ready': False,
+            'waiting_for': waiting_for
+        })
+
+
+def _advance_time_internal():
+    """内部函数：实际推进时间"""
+    global game_state, pending_actions, time_barrier_ready
     
     old_time = f"Day {game_state.day} {game_state.time_of_day.value}"
     
@@ -63,7 +109,12 @@ def advance_time():
     game_state.advance_time()
     
     new_time = f"Day {game_state.day} {game_state.time_of_day.value}"
-    print(f"\n[Coordinator] 时间推进: {old_time} -> {new_time}")
+    print(f"\n[Coordinator] ⏰ 时间推进: {old_time} -> {new_time}")
+    print(f"[Coordinator] 行动记录: {pending_actions}")
+    
+    # 清空行动记录
+    pending_actions = {}
+    time_barrier_ready = False
     
     # 通知所有注册的节点
     notification = game_state.to_dict()
@@ -88,10 +139,31 @@ def advance_time():
         except Exception as e:
             print(f"[Coordinator] 通知节点 {node_id} 失败: {e}")
     
-    return jsonify({
+    return {
         'success': True,
         'message': f'Time advanced to {new_time}',
         'time': game_state.to_dict()
+    }
+
+
+@app.route('/time/advance', methods=['POST'])
+def advance_time():
+    """手动推进时间（管理员功能，调试用）"""
+    result = _advance_time_internal()
+    return jsonify(result)
+
+
+@app.route('/action/status', methods=['GET'])
+def action_status():
+    """查询当前行动提交状态"""
+    villager_nodes = [nid for nid, info in registered_nodes.items() if info['node_type'] == 'villager']
+    
+    return jsonify({
+        'total_villagers': len(villager_nodes),
+        'submitted': len(pending_actions),
+        'pending_actions': pending_actions,
+        'waiting_for': [nid for nid in villager_nodes if nid not in pending_actions],
+        'ready_to_advance': time_barrier_ready
     })
 
 
