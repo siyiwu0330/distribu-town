@@ -432,15 +432,67 @@ def receive_trade_request():
     })
 
 
-@app.route('/trade/accept', methods=['POST'])
-def accept_trade():
-    """接受交易"""
-    data = request.json
-    trade_id = data['trade_id']
+@app.route('/trade/pending', methods=['GET'])
+def get_pending_trades():
+    """获取待处理的交易请求"""
+    if 'pending_trades' not in villager_state:
+        villager_state['pending_trades'] = []
     
     return jsonify({
         'success': True,
-        'message': 'Trade accepted'
+        'pending_trades': villager_state['pending_trades']
+    })
+
+
+@app.route('/trade/accept', methods=['POST'])
+def accept_trade():
+    """接受交易"""
+    villager = villager_state['villager']
+    
+    if not villager:
+        return jsonify({'success': False, 'message': 'Villager not initialized'}), 400
+    
+    data = request.json
+    trade_id = data['trade_id']
+    
+    # 查找交易
+    if 'pending_trades' not in villager_state:
+        return jsonify({'success': False, 'message': 'No pending trades'}), 400
+    
+    trade = None
+    for t in villager_state['pending_trades']:
+        if t['trade_id'] == trade_id:
+            trade = t
+            break
+    
+    if not trade:
+        return jsonify({'success': False, 'message': 'Trade not found'}), 400
+    
+    # 检查是否有足够的资源
+    if trade['offer_type'] == 'buy':
+        # 对方想买我的东西，我需要有物品
+        if not villager.inventory.has_item(trade['item'], trade['quantity']):
+            return jsonify({
+                'success': False,
+                'message': f"物品不足: {trade['item']} (需要{trade['quantity']})"
+            }), 400
+    else:
+        # 对方想卖给我，我需要有钱
+        if villager.inventory.money < trade['price']:
+            return jsonify({
+                'success': False,
+                'message': f"货币不足 (需要{trade['price']}, 拥有{villager.inventory.money})"
+            }), 400
+    
+    # 标记交易为已接受
+    trade['status'] = 'accepted'
+    
+    print(f"[Villager-{villager_state['node_id']}] 接受交易: {trade['from']} 的请求")
+    
+    return jsonify({
+        'success': True,
+        'message': 'Trade accepted. Waiting for initiator to complete.',
+        'trade': trade
     })
 
 
@@ -449,6 +501,17 @@ def reject_trade():
     """拒绝交易"""
     data = request.json
     trade_id = data['trade_id']
+    
+    if 'pending_trades' not in villager_state:
+        return jsonify({'success': False, 'message': 'No pending trades'}), 400
+    
+    # 移除交易
+    villager_state['pending_trades'] = [
+        t for t in villager_state['pending_trades'] 
+        if t['trade_id'] != trade_id
+    ]
+    
+    print(f"[Villager-{villager_state['node_id']}] 拒绝交易: {trade_id}")
     
     return jsonify({
         'success': True,

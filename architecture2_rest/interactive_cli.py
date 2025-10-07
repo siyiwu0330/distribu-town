@@ -298,30 +298,98 @@ class VillagerCLI:
         except Exception as e:
             print(f"\n✗ 错误: {e}")
     
-    def accept_pending_trade(self):
-        """接受待处理的交易"""
+    def check_pending_trades(self):
+        """查看待处理的交易请求"""
         try:
-            # 获取待处理的交易（简化版：直接从villager获取）
-            response = requests.get(f"{self.villager_url}/villager", timeout=5)
-            if response.status_code != 200:
-                print("\n✗ 无法获取村民信息")
-                return
+            response = requests.get(f"{self.villager_url}/trade/pending", timeout=5)
+            if response.status_code == 200:
+                data = response.json()
+                trades = data.get('pending_trades', [])
+                
+                if not trades:
+                    print("\n没有待处理的交易请求")
+                    return
+                
+                print("\n" + "="*60)
+                print("  收到的交易请求")
+                print("="*60)
+                
+                for i, trade in enumerate(trades, 1):
+                    status = trade.get('status', 'pending')
+                    print(f"\n[{i}] 交易ID: {trade['trade_id']}")
+                    print(f"    来自: {trade['from']}")
+                    
+                    if trade['offer_type'] == 'buy':
+                        print(f"    类型: 对方想购买")
+                        print(f"    物品: {trade['quantity']}x {trade['item']}")
+                        print(f"    出价: {trade['price']}金币")
+                    else:
+                        print(f"    类型: 对方想出售")
+                        print(f"    物品: {trade['quantity']}x {trade['item']}")
+                        print(f"    要价: {trade['price']}金币")
+                    
+                    print(f"    状态: {status}")
+                    print(f"    操作: accept {trade['trade_id']} 或 reject {trade['trade_id']}")
+                
+                print("="*60)
+            else:
+                print("\n✗ 无法获取交易请求")
+        
+        except Exception as e:
+            print(f"\n✗ 错误: {e}")
+    
+    def accept_trade_request(self, trade_id: str):
+        """接受交易请求"""
+        try:
+            response = requests.post(
+                f"{self.villager_url}/trade/accept",
+                json={'trade_id': trade_id},
+                timeout=5
+            )
             
-            # TODO: 应该获取pending_trades列表，这里简化处理
-            print("\n⚠️  简化实现：请使用 'trade <node> buy/sell <item> <quantity> <price>'")
-            print("   对方会看到交易请求并可以接受")
+            if response.status_code == 200:
+                data = response.json()
+                trade = data.get('trade', {})
+                
+                print(f"\n✓ 交易已接受！")
+                print(f"  交易ID: {trade_id}")
+                print(f"  等待 {trade.get('from', '对方')} 完成交易...")
+                print("\n💡 对方需要在他的终端执行 'confirm' 来完成交易")
+            else:
+                print(f"\n✗ 接受交易失败: {response.json().get('message', '未知错误')}")
+        
+        except Exception as e:
+            print(f"\n✗ 错误: {e}")
+    
+    def reject_trade_request(self, trade_id: str):
+        """拒绝交易请求"""
+        try:
+            response = requests.post(
+                f"{self.villager_url}/trade/reject",
+                json={'trade_id': trade_id},
+                timeout=5
+            )
             
+            if response.status_code == 200:
+                print(f"\n✓ 交易已拒绝: {trade_id}")
+            else:
+                print(f"\n✗ 拒绝交易失败")
+        
         except Exception as e:
             print(f"\n✗ 错误: {e}")
     
     def complete_pending_trade(self):
-        """完成待处理的交易"""
+        """完成自己发起的交易（在对方accept后）"""
         if not self.pending_trade:
             print("\n✗ 没有待处理的交易")
+            print("   使用 'trade <村民> buy/sell ...' 发起交易")
             return
         
         try:
             trade = self.pending_trade
+            
+            # 检查对方是否接受了交易
+            # 简化版：直接尝试完成
             
             # 先检查自己是否有足够的资源
             my_info = self.get_villager_info()
@@ -337,6 +405,8 @@ class VillagerCLI:
                 if items.get(trade['item'], 0) < trade['quantity']:
                     print(f"\n✗ 物品不足 (需要{trade['quantity']}x {trade['item']})")
                     return
+            
+            print(f"\n正在与 {trade['target']} 完成交易...")
             
             # 通知对方完成交易
             response = requests.post(
@@ -391,7 +461,11 @@ class VillagerCLI:
                 self.display_villager_info()
                 self.pending_trade = None
             else:
-                print(f"\n✗ 交易失败: 对方没有足够的资源")
+                error_msg = response.json().get('message', '未知错误')
+                print(f"\n✗ 交易失败: {error_msg}")
+                print("   可能的原因:")
+                print("   - 对方没有足够的资源")
+                print("   - 对方还没有接受交易")
         
         except Exception as e:
             print(f"\n✗ 错误: {e}")
@@ -472,11 +546,16 @@ class VillagerCLI:
         print("\n村民间交易（P2P，不经过协调器）:")
         print("  trade <村民> buy <物品> <数量> <价格>  - 向其他村民购买")
         print("  trade <村民> sell <物品> <数量> <价格> - 向其他村民出售")
-        print("  confirm         - 确认并完成交易")
-        print("  cancel          - 取消当前交易")
+        print("  trades          - 查看收到的交易请求")
+        print("  accept <ID>     - 接受指定的交易请求")
+        print("  reject <ID>     - 拒绝指定的交易请求")
+        print("  confirm         - 确认并完成自己发起的交易")
+        print("  cancel          - 取消自己发起的交易")
         print("  ")
-        print("  示例: trade bob buy wheat 10 100")
-        print("       (向bob购买10个小麦，出价100金币)")
+        print("  示例: trade bob buy wheat 10 100  → 向bob发起购买请求")
+        print("        trades                       → 查看收到的请求")
+        print("        accept trade_0               → 接受交易")
+        print("        confirm                      → 发起方完成交易")
         
         print("\n时间同步系统:")
         print("  submit work     - 提交'工作'行动（完成生产后）")
@@ -526,6 +605,7 @@ class VillagerCLI:
             print("  输入 'create' 开始创建")
         
         print("\n输入 'help' 查看所有命令")
+        print("💡 使用 'trades' 查看收到的交易请求")
         
         # 主循环
         while True:
@@ -630,11 +710,25 @@ class VillagerCLI:
                     except ValueError:
                         print("\n✗ 数量和价格必须是整数")
                 
-                # 确认交易
+                # 查看收到的交易请求
+                elif command == 'trades':
+                    self.check_pending_trades()
+                
+                # 接受交易请求
+                elif command == 'accept' and len(parts) >= 2:
+                    trade_id = parts[1]
+                    self.accept_trade_request(trade_id)
+                
+                # 拒绝交易请求
+                elif command == 'reject' and len(parts) >= 2:
+                    trade_id = parts[1]
+                    self.reject_trade_request(trade_id)
+                
+                # 确认自己发起的交易
                 elif command == 'confirm':
                     self.complete_pending_trade()
                 
-                # 取消交易
+                # 取消自己发起的交易
                 elif command == 'cancel':
                     if self.pending_trade:
                         print(f"\n✓ 已取消与 {self.pending_trade['target']} 的交易")
