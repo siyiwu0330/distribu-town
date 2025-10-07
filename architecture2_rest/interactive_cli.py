@@ -228,7 +228,18 @@ class VillagerCLI:
                 villagers = {}
                 for node in data['nodes']:
                     if node['node_type'] == 'villager':
-                        villagers[node['node_id']] = node['address']
+                        # 构建显示名称
+                        display_name = node['node_id']
+                        if node.get('name') and node['name'] != node['node_id']:
+                            if node.get('occupation'):
+                                display_name = f"{node['name']} ({node['occupation']})"
+                            else:
+                                display_name = node['name']
+                        
+                        villagers[node['node_id']] = {
+                            'address': node['address'],
+                            'display_name': display_name
+                        }
                 return villagers
             return {}
         except:
