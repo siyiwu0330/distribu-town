@@ -428,27 +428,22 @@ def sleep():
     if villager.has_slept:
         return jsonify({'success': False, 'message': '今天已经睡过了'}), 400
     
-    # 检查是否有房子、临时房间券或足够的钱租房
+    # 检查是否有房子或临时房间券
     has_house = villager.inventory.has_item("house", 1)
     has_temp_room = villager.inventory.has_item("temp_room", 1)
     
     if not has_house and not has_temp_room:
-        if villager.inventory.money < RENT_COST:
-            return jsonify({
-                'success': False,
-                'message': f'没有房子、临时房间券，且货币不足支付租金 (需要{RENT_COST}，拥有{villager.inventory.money})'
-            }), 400
+        return jsonify({
+            'success': False,
+            'message': '没有房子或临时房间券，无法睡眠。请从商人处购买临时房间券或建造房子。'
+        }), 400
     
-    # 预处理睡眠（扣费和恢复在这里执行）
+    # 预处理睡眠（恢复在这里执行）
     sleep_message = ""
     if has_house:
         sleep_message = "在自己的房子里睡眠"
-    elif has_temp_room:
+    else:  # has_temp_room
         sleep_message = "使用临时房间券睡眠（将在每日结算时消耗）"
-    else:
-        villager.inventory.remove_money(RENT_COST)
-        sleep_message = f"支付租金{RENT_COST}金币后睡眠"
-        print(f"[Villager-{villager_state['node_id']}] {villager.name} 支付租金 {RENT_COST}")
     
     villager.restore_stamina(SLEEP_STAMINA)
     villager.has_slept = True

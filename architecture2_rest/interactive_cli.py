@@ -339,6 +339,7 @@ class VillagerCLI:
                 
                 print(f"\n⏳ 等待 {target_node} 接受或拒绝...")
                 print(f"💡 提示: 对方需要在CLI中输入 'accept' 或 'reject' 命令")
+                print(f"   使用 'mytrades' 查看此交易的状态")
                 
                 # 保存交易信息到字典中
                 self.pending_trades[trade_id] = {
@@ -510,7 +511,7 @@ class VillagerCLI:
                 print(f"\n✓ 交易已接受！")
                 print(f"  交易ID: {trade_id}")
                 print(f"  等待 {trade.get('from', '对方')} 完成交易...")
-                print("\n💡 对方需要在他的终端执行 'confirm' 来完成交易")
+                print("\n💡 对方会在他的终端看到提醒并执行 'confirm' 来完成交易")
             else:
                 print(f"\n✗ 接受交易失败: {response.json().get('message', '未知错误')}")
         
