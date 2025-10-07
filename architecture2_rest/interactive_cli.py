@@ -519,7 +519,8 @@ class VillagerCLI:
                     'item': trade['item'],
                     'quantity': trade['quantity'],
                     'price': trade['price'],
-                    'type': trade['type']  # 发起方的type：buy表示对方要卖给我，sell表示对方要买我的
+                    'type': trade['type'],  # 发起方的type：buy表示对方要卖给我，sell表示对方要买我的
+                    'trade_id': trade.get('trade_id')  # 传递交易ID用于清理
                 },
                 timeout=5
             )

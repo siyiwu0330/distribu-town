@@ -648,6 +648,7 @@ def complete_trade():
     quantity = data['quantity']
     price = data['price']
     trade_type = data['type']  # 'buy' or 'sell'
+    trade_id = data.get('trade_id')  # 获取交易ID用于清理
     
     try:
         if trade_type == 'buy':
@@ -676,6 +677,14 @@ def complete_trade():
             villager.inventory.add_item(item, quantity)
             
             print(f"[Villager-{villager_state['node_id']}] 交易完成: 从 {from_node} 购买 {quantity}x {item}, 支付 {price}金币")
+        
+        # 清理pending_trades中的已完成交易
+        if 'pending_trades' in villager_state and trade_id:
+            villager_state['pending_trades'] = [
+                t for t in villager_state['pending_trades']
+                if t.get('trade_id') != trade_id
+            ]
+            print(f"[Villager-{villager_state['node_id']}] 已清理交易记录: {trade_id}")
         
         return jsonify({
             'success': True,
