@@ -159,6 +159,19 @@ class VillagerCLI:
         except Exception as e:
             print(f"\n✗ 错误: {e}")
     
+    def eat(self):
+        """吃面包恢复体力"""
+        try:
+            response = requests.post(f"{self.villager_url}/action/eat", timeout=5)
+            
+            if response.status_code == 200:
+                print(f"\n✓ {response.json()['message']}")
+                self.display_villager_info(response.json()['villager'])
+            else:
+                print(f"\n✗ {response.json()['message']}")
+        except Exception as e:
+            print(f"\n✗ 错误: {e}")
+    
     def get_current_time(self):
         """获取当前时间"""
         try:
@@ -577,6 +590,7 @@ class VillagerCLI:
         print("  buy <物品> <数量>   - 从商人购买（不消耗行动点）")
         print("  sell <物品> <数量>  - 出售给商人（不消耗行动点）")
         print("  sleep / rest    - 睡眠恢复体力（不消耗行动点）")
+        print("  eat / e         - 吃面包恢复体力（消耗1个面包，恢复30体力）")
         
         print("\n村民间交易（P2P，不经过协调器）:")
         print("  trade <村民> buy <物品> <数量> <价格>  - 向其他村民购买")
@@ -599,19 +613,31 @@ class VillagerCLI:
         print("  ")
         print("  ⚠️  只有所有村民都提交行动后，时间才会推进！")
         print("  这是一个分布式同步屏障（Barrier Synchronization）")
+        print("  ")
+        print("  💡 行动点机制：每个时段（早中晚）有1个行动点")
+        print("     时间推进到下一时段时自动刷新1点")
         
-        print("\n示例工作流:")
-        print("  buy seed 5      → 购买种子")
-        print("  produce         → 生产小麦")
-        print("  produce         → 再次生产")
-        print("  produce         → 第三次生产")
+        print("\n示例工作流（早上）:")
+        print("  buy seed 1      → 购买种子")
+        print("  produce         → 生产小麦（消耗1行动点）")
         print("  submit work     → 提交行动，等待其他村民")
-        print("  [等待...]       → 其他村民也提交后，时间自动推进")
+        print("  [等待...]       → 时间推进到中午，行动点刷新为1")
+        print("  ")
+        print("  中午:")
+        print("  produce         → 再次生产（消耗1行动点）")
+        print("  eat             → 吃面包恢复体力")
+        print("  submit work     → 提交，等待推进到晚上")
         
         print("\n职业生产规则:")
         print("  farmer (农夫):     1种子 → 5小麦 (20体力, 1行动点)")
         print("  chef (厨师):       3小麦 → 2面包 (15体力, 1行动点)")
         print("  carpenter (木工):  10木材 → 1住房 (30体力, 1行动点)")
+        
+        print("\n新增物品:")
+        print("  bread (面包)      - 可从商人购买(20金币)或厨师制作")
+        print("                      吃掉恢复30体力")
+        print("  temp_room (临时房间券) - 从商人购买(15金币)")
+        print("                      可用于睡眠，每日结算时消耗1个")
         print("="*50)
     
     def run(self):
@@ -727,6 +753,10 @@ class VillagerCLI:
                 # 睡眠
                 elif command in ['sleep', 'rest']:
                     self.sleep()
+                
+                # 吃饭
+                elif command in ['eat', 'e']:
+                    self.eat()
                 
                 # 村民间交易
                 elif command == 'trade' and len(parts) >= 5:

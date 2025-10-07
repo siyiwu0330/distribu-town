@@ -382,32 +382,74 @@ def sleep():
     if villager.has_slept:
         return jsonify({'success': False, 'message': '今天已经睡过了'}), 400
     
-    # 检查是否有房子或足够的钱租房
+    # 检查是否有房子、临时房间券或足够的钱租房
     has_house = villager.inventory.has_item("house", 1)
+    has_temp_room = villager.inventory.has_item("temp_room", 1)
     
-    if not has_house:
+    if not has_house and not has_temp_room:
         if villager.inventory.money < RENT_COST:
             return jsonify({
                 'success': False,
-                'message': f'没有房子且货币不足支付租金 (需要{RENT_COST}，拥有{villager.inventory.money})'
+                'message': f'没有房子、临时房间券，且货币不足支付租金 (需要{RENT_COST}，拥有{villager.inventory.money})'
             }), 400
     
     # 预处理睡眠（扣费和恢复在这里执行）
-    if not has_house:
+    sleep_message = ""
+    if has_house:
+        sleep_message = "在自己的房子里睡眠"
+    elif has_temp_room:
+        sleep_message = "使用临时房间券睡眠（将在每日结算时消耗）"
+    else:
         villager.inventory.remove_money(RENT_COST)
+        sleep_message = f"支付租金{RENT_COST}金币后睡眠"
         print(f"[Villager-{villager_state['node_id']}] {villager.name} 支付租金 {RENT_COST}")
     
     villager.restore_stamina(SLEEP_STAMINA)
     villager.has_slept = True
     
-    print(f"[Villager-{villager_state['node_id']}] {villager.name} 睡眠，恢复体力 {SLEEP_STAMINA}")
+    print(f"[Villager-{villager_state['node_id']}] {villager.name} {sleep_message}，恢复体力 {SLEEP_STAMINA}")
     print(f"  当前体力: {villager.stamina}/{villager.max_stamina}")
     
     return jsonify({
         'success': True,
-        'message': f'睡眠成功，恢复体力 {SLEEP_STAMINA}。请提交行动等待时间推进',
+        'message': f'睡眠成功，恢复体力 {SLEEP_STAMINA}。{sleep_message}。请提交行动等待时间推进',
         'villager': villager.to_dict()
     })
+
+
+@app.route('/action/eat', methods=['POST'])
+def eat_food():
+    """吃面包恢复体力"""
+    villager = villager_state['villager']
+    
+    if not villager:
+        return jsonify({'success': False, 'message': 'Villager not initialized'}), 400
+    
+    if not villager.inventory.has_item("bread", 1):
+        return jsonify({
+            'success': False,
+            'message': '没有面包可以吃'
+        }), 400
+    
+    # 吃面包
+    old_stamina = villager.stamina
+    success = villager.eat_bread()
+    
+    if success:
+        restored = villager.stamina - old_stamina
+        print(f"[Villager-{villager_state['node_id']}] {villager.name} 吃了面包，恢复 {restored} 体力")
+        print(f"  当前体力: {villager.stamina}/{villager.max_stamina}")
+        
+        return jsonify({
+            'success': True,
+            'message': f'吃了面包，恢复 {restored} 体力',
+            'villager': villager.to_dict()
+        })
+    else:
+        return jsonify({
+            'success': False,
+            'message': '吃面包失败'
+        }), 400
 
 
 @app.route('/trade/request', methods=['POST'])
@@ -620,6 +662,12 @@ def on_time_advance():
         villager.reset_daily()
         print(f"[Villager-{villager_state['node_id']}] 新的一天！")
         print(f"  体力: {villager.stamina}/{villager.max_stamina}")
+        print(f"  行动点: {villager.action_points}")
+    else:
+        # 每个时段刷新行动点
+        villager.refresh_action_point()
+        print(f"[Villager-{villager_state['node_id']}] 行动点已刷新")
+        print(f"  当前时段: {data['time_of_day']}")
         print(f"  行动点: {villager.action_points}")
     
     return jsonify({'success': True, 'message': 'Time updated'})

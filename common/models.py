@@ -37,6 +37,7 @@ class ItemType(Enum):
     WHEAT = "wheat"        # 小麦
     BREAD = "bread"        # 面包
     HOUSE = "house"        # 住房
+    TEMP_ROOM = "temp_room"  # 临时房间券
 
 
 @dataclass
@@ -101,7 +102,7 @@ class Villager:
     stamina: int = 100  # 体力
     max_stamina: int = 100
     inventory: Inventory = field(default_factory=Inventory)
-    action_points: int = 3  # 每天的行动点数
+    action_points: int = 1  # 当前时段的行动点数（每时段1点）
     has_slept: bool = False  # 当天是否已睡眠
     
     def consume_stamina(self, amount: int) -> bool:
@@ -122,12 +123,27 @@ class Villager:
         self.action_points -= 1
         return True
     
+    def refresh_action_point(self):
+        """刷新行动点（每时段调用）"""
+        self.action_points = 1
+    
     def reset_daily(self):
         """每日重置"""
-        self.action_points = 3
+        self.action_points = 1
         self.has_slept = False
         # 饥饿扣除体力
         self.stamina = max(0, self.stamina - 10)
+        # 每日结算消耗临时房间券
+        if self.inventory.has_item("temp_room", 1):
+            self.inventory.remove_item("temp_room", 1)
+    
+    def eat_bread(self) -> bool:
+        """吃面包恢复体力"""
+        if not self.inventory.has_item("bread", 1):
+            return False
+        self.inventory.remove_item("bread", 1)
+        self.restore_stamina(30)  # 恢复30点体力
+        return True
     
     def to_dict(self) -> dict:
         """转换为字典"""
@@ -212,23 +228,26 @@ PRODUCTION_RECIPES = {
 MERCHANT_PRICES = {
     # 商人出售的价格
     "buy": {
-        "wood": 5,      # 木材
-        "seed": 2,      # 种子
+        "wood": 5,        # 木材
+        "seed": 2,        # 种子
+        "bread": 20,      # 面包（可购买食用）
+        "temp_room": 15,  # 临时房间券
     },
     # 商人收购的价格
     "sell": {
         "wheat": 8,     # 小麦
-        "bread": 15,    # 面包
+        "bread": 15,    # 面包（厨师出售）
         "house": 150    # 住房（建造委托）
     }
 }
 
 
 # 其他常量
-RENT_COST = 10          # 租房费用
+RENT_COST = 10          # 租房费用（没有房子或临时房间券时）
 SLEEP_STAMINA = 30      # 睡眠恢复体力
 NO_SLEEP_PENALTY = 20   # 不睡眠额外消耗体力
 DAILY_HUNGER = 10       # 每日饥饿扣除体力
+BREAD_RESTORE = 30      # 吃面包恢复体力
 
 
 @dataclass
