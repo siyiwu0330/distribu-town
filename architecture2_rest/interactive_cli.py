@@ -237,31 +237,22 @@ class VillagerCLI:
             # 获取所有村民节点
             villagers = self.get_all_villagers()
             
-            # 支持通过node_id或name查找
+            # 支持通过node_id查找
             target_address = None
             target_id = None
             
-            # 先尝试直接匹配node_id
             if target_node in villagers:
-                target_address = villagers[target_node]
+                target_info = villagers[target_node]
+                target_address = target_info['address']
                 target_id = target_node
             else:
-                # 否则尝试通过name匹配
-                for nid, addr in villagers.items():
-                    # 这里简化处理，实际应该查询节点的name
-                    # 暂时假设用户知道正确的node_id
-                    pass
-                
-                if not target_address:
-                    print(f"\n✗ 找不到村民节点: {target_node}")
-                    print(f"可用的节点ID: {', '.join(villagers.keys())}")
-                    print("\n💡 提示: 使用节点ID而不是村民名字")
-                    print("   例如: trade node1 buy wheat 10 100")
-                    return
-            
-            if not target_address:
-                target_address = villagers[target_node]
-                target_id = target_node
+                print(f"\n✗ 找不到村民节点: {target_node}")
+                print(f"\n可用的村民:")
+                for nid, info in villagers.items():
+                    print(f"   {nid}: {info['display_name']}")
+                print("\n💡 提示: 使用节点ID")
+                print("   例如: trade node1 buy wheat 10 100")
+                return
             
             # 获取当前村民信息
             my_info = self.get_villager_info()

@@ -62,7 +62,7 @@ def create_villager():
         print(f"  体力: {villager.stamina}/{villager.max_stamina}")
         print(f"  货币: {villager.inventory.money}")
         
-        # 创建村民后，重新注册到协调器以更新名字
+        # 创建村民后，重新注册到协调器以更新名字和职业
         coordinator_addr = villager_state.get('coordinator_address', 'localhost:5000')
         port = villager_state.get('port')
         node_id = villager_state['node_id']
@@ -75,12 +75,13 @@ def create_villager():
                         'node_id': node_id,
                         'node_type': 'villager',
                         'address': f'localhost:{port}',
-                        'name': villager.name
+                        'name': villager.name,
+                        'occupation': villager.occupation.value
                     },
                     timeout=5
                 )
                 if response.status_code == 200:
-                    print(f"[Villager-{node_id}] 已更新协调器中的名字: {villager.name}")
+                    print(f"[Villager-{node_id}] 已更新协调器: {villager.name} ({villager.occupation.value})")
             except:
                 pass
         
