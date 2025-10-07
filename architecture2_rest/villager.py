@@ -62,6 +62,28 @@ def create_villager():
         print(f"  体力: {villager.stamina}/{villager.max_stamina}")
         print(f"  货币: {villager.inventory.money}")
         
+        # 创建村民后，重新注册到协调器以更新名字
+        coordinator_addr = villager_state.get('coordinator_address', 'localhost:5000')
+        port = villager_state.get('port')
+        node_id = villager_state['node_id']
+        
+        if port:
+            try:
+                response = requests.post(
+                    f"http://{coordinator_addr}/register",
+                    json={
+                        'node_id': node_id,
+                        'node_type': 'villager',
+                        'address': f'localhost:{port}',
+                        'name': villager.name
+                    },
+                    timeout=5
+                )
+                if response.status_code == 200:
+                    print(f"[Villager-{node_id}] 已更新协调器中的名字: {villager.name}")
+            except:
+                pass
+        
         return jsonify({
             'success': True,
             'message': f'Villager {villager.name} created successfully',
@@ -608,18 +630,27 @@ def register_to_coordinator(coordinator_addr, port, node_id):
     time.sleep(2)  # 等待服务启动
     
     try:
+        # 获取村民名字（如果已创建）
+        villager_name = None
+        if villager_state.get('villager'):
+            villager_name = villager_state['villager'].name
+        
         response = requests.post(
             f"http://{coordinator_addr}/register",
             json={
                 'node_id': node_id,
                 'node_type': 'villager',
-                'address': f'localhost:{port}'
+                'address': f'localhost:{port}',
+                'name': villager_name or node_id
             },
             timeout=5
         )
         
         if response.status_code == 200:
-            print(f"[Villager-{node_id}] 成功注册到协调器: {coordinator_addr}")
+            if villager_name:
+                print(f"[Villager-{node_id}] ({villager_name}) 成功注册到协调器: {coordinator_addr}")
+            else:
+                print(f"[Villager-{node_id}] 成功注册到协调器: {coordinator_addr}")
         else:
             print(f"[Villager-{node_id}] 注册失败: {response.status_code}")
     
@@ -631,8 +662,10 @@ def run_server(port, node_id, coordinator_addr='localhost:5000'):
     """运行服务器"""
     villager_state['node_id'] = node_id
     villager_state['coordinator_address'] = coordinator_addr
+    villager_state['port'] = port
     
     print(f"[Villager-{node_id}] REST村民节点启动在端口 {port}")
+    print(f"[Villager-{node_id}] 节点ID: {node_id} (村民名字将在create时设置)")
     
     # 在后台线程注册到协调器
     threading.Thread(

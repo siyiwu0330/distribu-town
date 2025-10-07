@@ -33,14 +33,19 @@ def register_node():
     node_id = data['node_id']
     node_type = data['node_type']
     address = data['address']
+    name = data.get('name', node_id)  # 可选的村民名字
     
     registered_nodes[node_id] = {
         'node_id': node_id,
         'node_type': node_type,
-        'address': address
+        'address': address,
+        'name': name
     }
     
-    print(f"[Coordinator] 节点注册: {node_id} ({node_type}) @ {address}")
+    if name != node_id:
+        print(f"[Coordinator] 节点注册: {node_id} ({name}, {node_type}) @ {address}")
+    else:
+        print(f"[Coordinator] 节点注册: {node_id} ({node_type}) @ {address}")
     
     return jsonify({
         'success': True,
