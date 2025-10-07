@@ -17,7 +17,7 @@ class VillagerCLI:
         self.coordinator_url = f"http://localhost:{coordinator_port}"
         self.merchant_url = f"http://localhost:{merchant_port}"
         self.villager_port = villager_port
-        self.pending_trade = None  # 当前等待响应的交易
+        self.pending_trades = {}  # 当前等待响应的交易，key为trade_id
     
     def check_connection(self) -> bool:
         """检查连接"""
@@ -340,8 +340,8 @@ class VillagerCLI:
                 print(f"\n⏳ 等待 {target_node} 接受或拒绝...")
                 print(f"💡 提示: 对方需要在CLI中输入 'accept' 或 'reject' 命令")
                 
-                # 保存交易信息
-                self.pending_trade = {
+                # 保存交易信息到字典中
+                self.pending_trades[trade_id] = {
                     'target': target_id,
                     'target_address': target_address,
                     'item': item,
@@ -359,47 +359,49 @@ class VillagerCLI:
     
     def check_my_pending_trade_status(self):
         """检查自己发起的交易状态"""
-        if not self.pending_trade:
+        if not self.pending_trades:
             return
         
-        # 如果已经提示过，就不再提示
-        if self.pending_trade.get('status') == 'ready_to_confirm':
-            return
-        
-        try:
-            # 向对方查询交易状态
-            response = requests.get(
-                f"http://{self.pending_trade['target_address']}/trade/pending",
-                timeout=2
-            )
+        for trade_id, trade in list(self.pending_trades.items()):
+            # 如果已经提示过，就不再提示
+            if trade.get('status') == 'ready_to_confirm':
+                continue
             
-            if response.status_code == 200:
-                data = response.json()
-                trades = data.get('pending_trades', [])
+            try:
+                # 向对方查询交易状态
+                response = requests.get(
+                    f"http://{trade['target_address']}/trade/pending",
+                    timeout=2
+                )
                 
-                # 查找我们的交易
-                for trade in trades:
-                    if trade['trade_id'] == self.pending_trade['trade_id']:
-                        if trade.get('status') == 'accepted':
-                            # 对方已经接受，提示用户confirm
-                            print("\n" + "="*60)
-                            print("🎉 对方已接受你的交易请求！")
-                            print("="*60)
-                            print(f"交易详情:")
-                            if self.pending_trade['type'] == 'buy':
-                                print(f"  购买 {self.pending_trade['quantity']}x {self.pending_trade['item']}")
-                                print(f"  支付 {self.pending_trade['price']}金币")
-                            else:
-                                print(f"  出售 {self.pending_trade['quantity']}x {self.pending_trade['item']}")
-                                print(f"  获得 {self.pending_trade['price']}金币")
-                            print(f"\n💡 输入 'confirm' 完成交易，或输入 'cancel' 取消")
-                            print("="*60 + "\n")
-                            
-                            # 标记为已提示
-                            self.pending_trade['status'] = 'ready_to_confirm'
-                        break
-        except:
-            pass  # 静默失败
+                if response.status_code == 200:
+                    data = response.json()
+                    trades_list = data.get('pending_trades', [])
+                    
+                    # 查找我们的交易
+                    for remote_trade in trades_list:
+                        if remote_trade['trade_id'] == trade_id:
+                            if remote_trade.get('status') == 'accepted':
+                                # 对方已经接受，提示用户confirm
+                                print("\n" + "="*60)
+                                print(f"🎉 对方已接受你的交易请求！[{trade_id}]")
+                                print("="*60)
+                                print(f"交易详情:")
+                                if trade['type'] == 'buy':
+                                    print(f"  购买 {trade['quantity']}x {trade['item']}")
+                                    print(f"  支付 {trade['price']}金币")
+                                else:
+                                    print(f"  出售 {trade['quantity']}x {trade['item']}")
+                                    print(f"  获得 {trade['price']}金币")
+                                print(f"\n💡 输入 'confirm {trade_id}' 完成交易")
+                                print(f"   或输入 'cancel {trade_id}' 取消")
+                                print("="*60 + "\n")
+                                
+                                # 标记为已提示
+                                self.pending_trades[trade_id]['status'] = 'ready_to_confirm'
+                            break
+            except:
+                pass  # 静默失败
     
     def check_pending_trades(self):
         """查看待处理的交易请求"""
@@ -431,8 +433,13 @@ class VillagerCLI:
                         print(f"    物品: {trade['quantity']}x {trade['item']}")
                         print(f"    要价: {trade['price']}金币")
                     
-                    print(f"    状态: {status}")
-                    print(f"    操作: accept {trade['trade_id']} 或 reject {trade['trade_id']}")
+                    # 根据状态显示不同的提示
+                    if status == 'accepted':
+                        print(f"    状态: ✓ 已接受（等待对方完成）")
+                        print(f"    操作: 等待对方confirm或reject {trade['trade_id']} 取消")
+                    else:
+                        print(f"    状态: ⏳ 待处理")
+                        print(f"    操作: accept {trade['trade_id']} 或 reject {trade['trade_id']}")
                 
                 print("="*60)
             else:
@@ -444,6 +451,18 @@ class VillagerCLI:
     def accept_trade_request(self, trade_id: str):
         """接受交易请求"""
         try:
+            # 先检查交易状态
+            trades_response = requests.get(f"{self.villager_url}/trade/pending", timeout=5)
+            if trades_response.status_code == 200:
+                trades = trades_response.json().get('pending_trades', [])
+                for trade in trades:
+                    if trade['trade_id'] == trade_id:
+                        if trade.get('status') == 'accepted':
+                            print(f"\n⚠️  交易 {trade_id} 已经被接受过了")
+                            print("   等待对方完成交易...")
+                            return
+                        break
+            
             response = requests.post(
                 f"{self.villager_url}/trade/accept",
                 json={'trade_id': trade_id},
@@ -481,15 +500,32 @@ class VillagerCLI:
         except Exception as e:
             print(f"\n✗ 错误: {e}")
     
-    def complete_pending_trade(self):
+    def complete_pending_trade(self, trade_id: str = None):
         """完成自己发起的交易（在对方accept后）"""
-        if not self.pending_trade:
+        if not self.pending_trades:
             print("\n✗ 没有待处理的交易")
             print("   使用 'trade <村民> buy/sell ...' 发起交易")
             return
         
+        # 如果没有指定trade_id，检查是否只有一个待处理交易
+        if trade_id is None:
+            if len(self.pending_trades) == 1:
+                trade_id = list(self.pending_trades.keys())[0]
+            else:
+                print("\n✗ 有多个待处理的交易，请指定交易ID")
+                print("   可用的交易:")
+                for tid, t in self.pending_trades.items():
+                    status_text = "✓ 已接受" if t.get('status') == 'ready_to_confirm' else "⏳ 等待接受"
+                    print(f"   {tid}: {t['type']} {t['quantity']}x {t['item']} ({status_text})")
+                print(f"\n   使用 'confirm <trade_id>' 完成指定交易")
+                return
+        
+        if trade_id not in self.pending_trades:
+            print(f"\n✗ 找不到交易: {trade_id}")
+            return
+        
         try:
-            trade = self.pending_trade
+            trade = self.pending_trades[trade_id]
             
             # 检查对方是否接受了交易
             # 简化版：直接尝试完成
@@ -565,7 +601,7 @@ class VillagerCLI:
                         print(f"  获得: {trade['price']}金币")
                     
                     self.display_villager_info()
-                    self.pending_trade = None
+                    del self.pending_trades[trade_id]  # 清理已完成的交易
                 else:
                     result_data = result.json()
                     print(f"\n✗ 交易失败: {result_data.get('message', '未知错误')}")
@@ -681,7 +717,7 @@ class VillagerCLI:
         print("  示例: trade bob buy wheat 10 100  → 向bob发起购买请求")
         print("        trades                       → 查看收到的请求")
         print("        accept trade_0               → 接受交易")
-        print("        confirm                      → 发起方完成交易")
+        print("        confirm trade_0              → 发起方完成交易（指定ID）")
         
         print("\n时间同步系统:")
         print("  ⚠️  每个时段只能做一个主要行动（工作/睡眠/空闲）")
@@ -867,15 +903,34 @@ class VillagerCLI:
                 
                 # 确认自己发起的交易
                 elif command == 'confirm':
-                    self.complete_pending_trade()
+                    if len(parts) >= 2:
+                        trade_id = parts[1]
+                        self.complete_pending_trade(trade_id)
+                    else:
+                        self.complete_pending_trade()  # 不指定ID，自动选择
                 
                 # 取消自己发起的交易
                 elif command == 'cancel':
-                    if self.pending_trade:
-                        print(f"\n✓ 已取消与 {self.pending_trade['target']} 的交易")
-                        self.pending_trade = None
+                    if len(parts) >= 2:
+                        trade_id = parts[1]
+                        if trade_id in self.pending_trades:
+                            print(f"\n✓ 已取消交易 {trade_id}")
+                            del self.pending_trades[trade_id]
+                        else:
+                            print(f"\n✗ 找不到交易: {trade_id}")
                     else:
-                        print("\n✗ 没有待处理的交易")
+                        if self.pending_trades:
+                            # 如果只有一个交易，直接取消
+                            if len(self.pending_trades) == 1:
+                                trade_id = list(self.pending_trades.keys())[0]
+                                print(f"\n✓ 已取消交易 {trade_id}")
+                                del self.pending_trades[trade_id]
+                            else:
+                                print("\n✗ 有多个待处理的交易，请指定交易ID")
+                                for tid in self.pending_trades.keys():
+                                    print(f"   {tid}")
+                        else:
+                            print("\n✗ 没有待处理的交易")
                 
                 # 未知命令
                 else:
