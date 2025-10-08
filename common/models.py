@@ -43,7 +43,7 @@ class ItemType(Enum):
 @dataclass
 class Inventory:
     """库存系统"""
-    money: int = 100  # 初始货币
+    money: int = 200  # 初始货币（增加到200，确保能购买原材料）
     items: Dict[str, int] = field(default_factory=dict)
     
     def add_item(self, item: str, quantity: int = 1):
