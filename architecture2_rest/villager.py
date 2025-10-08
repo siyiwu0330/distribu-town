@@ -13,7 +13,7 @@ sys.path.insert(0, os.path.join(os.path.dirname(__file__), '..'))
 from common.models import (
     Villager, Occupation, Gender, Inventory,
     PRODUCTION_RECIPES, MERCHANT_PRICES,
-    RENT_COST, SLEEP_STAMINA, NO_SLEEP_PENALTY
+    SLEEP_STAMINA, NO_SLEEP_PENALTY
 )
 
 app = Flask(__name__)
