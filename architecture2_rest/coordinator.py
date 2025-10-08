@@ -202,6 +202,67 @@ def list_nodes():
     })
 
 
+@app.route('/messages/broadcast', methods=['POST'])
+def broadcast_message():
+    """广播消息到所有村民节点"""
+    try:
+        data = request.json
+        sender_id = data['from']
+        sender_name = data['from_name']
+        content = data['content']
+        
+        # 获取所有村民节点
+        villager_nodes = [node for node in registered_nodes.values() if node['node_type'] == 'villager']
+        
+        if not villager_nodes:
+            return jsonify({'success': False, 'message': 'No villager nodes found'}), 404
+        
+        # 向每个村民节点发送广播消息
+        success_count = 0
+        failed_nodes = []
+        
+        for node in villager_nodes:
+            try:
+                response = requests.post(
+                    f"http://{node['address']}/messages",
+                    json={
+                        'from': sender_id,
+                        'from_name': sender_name,
+                        'to': 'all',
+                        'type': 'broadcast',
+                        'content': content,
+                        'timestamp': ''
+                    },
+                    timeout=3
+                )
+                
+                if response.status_code == 200:
+                    success_count += 1
+                else:
+                    failed_nodes.append(node['node_id'])
+                    
+            except Exception as e:
+                failed_nodes.append(node['node_id'])
+                print(f"[Coordinator] 无法发送广播消息到 {node['node_id']}: {e}")
+        
+        print(f"[Coordinator] 📢 广播消息: {sender_name}: {content}")
+        print(f"[Coordinator] 成功发送到 {success_count}/{len(villager_nodes)} 个节点")
+        
+        if failed_nodes:
+            print(f"[Coordinator] 发送失败的节点: {failed_nodes}")
+        
+        return jsonify({
+            'success': True,
+            'message': f'Broadcast sent to {success_count}/{len(villager_nodes)} nodes',
+            'success_count': success_count,
+            'total_nodes': len(villager_nodes),
+            'failed_nodes': failed_nodes
+        })
+    
+    except Exception as e:
+        return jsonify({'success': False, 'error': str(e)}), 500
+
+
 def run_server(port=5000):
     """运行服务器"""
     print(f"[Coordinator] REST时间协调器启动在端口 {port}")

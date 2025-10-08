@@ -718,6 +718,128 @@ class VillagerCLI:
         except Exception as e:
             print(f"\n✗ 错误: {e}")
     
+    def get_messages(self):
+        """获取消息列表"""
+        try:
+            response = requests.get(f"{self.villager_url}/messages", timeout=5)
+            if response.status_code == 200:
+                return response.json()['messages']
+            else:
+                return []
+        except Exception as e:
+            print(f"获取消息失败: {e}")
+            return []
+    
+    def send_message(self, target, content, message_type='private'):
+        """发送消息"""
+        try:
+            response = requests.post(
+                f"{self.villager_url}/messages/send",
+                json={
+                    'target': target,
+                    'content': content,
+                    'type': message_type
+                },
+                timeout=5
+            )
+            
+            if response.status_code == 200:
+                result = response.json()
+                if result['success']:
+                    if message_type == 'broadcast':
+                        print(f"✓ 广播消息已发送: {content}")
+                    else:
+                        print(f"✓ 私聊消息已发送到 {target}: {content}")
+                else:
+                    print(f"✗ 发送失败: {result.get('message', 'Unknown error')}")
+            else:
+                print(f"✗ 发送失败: HTTP {response.status_code}")
+        
+        except Exception as e:
+            print(f"✗ 发送消息时出错: {e}")
+    
+    def display_messages(self):
+        """显示消息列表"""
+        messages = self.get_messages()
+        
+        if not messages:
+            print("\n📭 没有消息")
+            return
+        
+        print("\n" + "="*60)
+        print("  消息列表")
+        print("="*60)
+        
+        unread_count = 0
+        for msg in messages:
+            if not msg['read']:
+                unread_count += 1
+        
+        if unread_count > 0:
+            print(f"📬 未读消息: {unread_count}")
+        
+        print()
+        
+        for msg in messages:
+            status_icon = "📬" if not msg['read'] else "📭"
+            type_icon = "📢" if msg['type'] == 'broadcast' else "💬"
+            
+            print(f"{status_icon} {type_icon} [{msg['id']}] 来自: {msg['from']}")
+            print(f"   内容: {msg['content']}")
+            if msg['type'] == 'private':
+                print(f"   发送给: {msg['to']}")
+            print()
+        
+        print("="*60)
+    
+    def mark_messages_read(self, message_id=None):
+        """标记消息为已读"""
+        try:
+            data = {}
+            if message_id:
+                data['message_id'] = message_id
+            
+            response = requests.post(
+                f"{self.villager_url}/messages/mark_read",
+                json=data,
+                timeout=5
+            )
+            
+            if response.status_code == 200:
+                if message_id:
+                    print(f"✓ 消息 {message_id} 已标记为已读")
+                else:
+                    print("✓ 所有消息已标记为已读")
+            else:
+                print("✗ 标记消息失败")
+        
+        except Exception as e:
+            print(f"✗ 标记消息时出错: {e}")
+    
+    def get_online_villagers(self):
+        """获取在线村民列表"""
+        try:
+            response = requests.get(f"{self.coordinator_url}/nodes", timeout=5)
+            if response.status_code == 200:
+                nodes_data = response.json()
+                villagers = []
+                for node in nodes_data['nodes']:
+                    if node['node_type'] == 'villager':
+                        display_name = node.get('name', node['node_id'])
+                        if node.get('occupation'):
+                            display_name += f" ({node['occupation']})"
+                        villagers.append({
+                            'node_id': node['node_id'],
+                            'name': node.get('name', node['node_id']),
+                            'display_name': display_name
+                        })
+                return villagers
+            else:
+                return []
+        except Exception as e:
+            print(f"获取村民列表失败: {e}")
+            return []
+
     def show_help(self):
         """显示帮助"""
         print("\n" + "="*50)
@@ -747,12 +869,24 @@ class VillagerCLI:
         print("  mytrades        - 查看自己发起的交易请求")
         print("  accept <ID>     - 接受指定的交易请求")
         print("  reject <ID>     - 拒绝指定的交易请求")
-        print("  confirm [ID]    - 确认并完成自己发起的交易（可选指定ID）")
-        print("  cancel [ID]     - 取消自己发起的交易（可选指定ID）")
-        print("  ")
-        print("  示例: trade bob buy wheat 10 100  → 向bob发起购买请求")
+        print("  confirm <ID>    - 确认并完成自己发起的交易（指定ID）")
+        print("  cancel <ID>     - 取消自己发起的交易（指定ID）")
+        
+        print("\n消息系统:")
+        print("  messages / msgs - 查看所有消息")
+        print("  send <目标> <内容> - 发送私聊消息")
+        print("  broadcast <内容> - 发送广播消息")
+        print("  villagers / list - 查看在线村民列表")
+        print("  read [ID]       - 标记消息为已读（可选指定ID）")
+        
+        print("\n  示例: send node2 你好，需要小麦吗？")
+        print("        broadcast 出售小麦，价格优惠！")
+        print("        messages   → 查看所有消息")
+        print("        read       → 标记所有消息为已读")
+        
+        print("\n  示例: trade bob buy wheat 10 100  → 向bob发起购买请求")
         print("        trades                       → 查看收到的请求")
-        print("        mytrades                     → 查看自己发起的请求")
+        print("        mytrades                      → 查看自己发起的请求")
         print("        accept trade_0               → 接受交易")
         print("        confirm trade_0              → 发起方完成交易（指定ID）")
         
@@ -972,6 +1106,45 @@ class VillagerCLI:
                                     print(f"   {tid}")
                         else:
                             print("\n✗ 没有待处理的交易")
+                
+                # 消息系统命令
+                elif command in ['messages', 'msgs']:
+                    self.display_messages()
+                
+                # 发送私聊消息
+                elif command == 'send' and len(parts) >= 3:
+                    target = parts[1]
+                    content = ' '.join(parts[2:])
+                    self.send_message(target, content, 'private')
+                
+                # 发送广播消息
+                elif command == 'broadcast' and len(parts) >= 2:
+                    content = ' '.join(parts[1:])
+                    self.send_message('all', content, 'broadcast')
+                
+                # 查看在线村民列表
+                elif command in ['villagers', 'list']:
+                    villagers = self.get_online_villagers()
+                    if villagers:
+                        print("\n" + "="*50)
+                        print("  在线村民列表")
+                        print("="*50)
+                        for villager in villagers:
+                            print(f"  • {villager['display_name']} (ID: {villager['node_id']})")
+                        print("="*50)
+                    else:
+                        print("\n📭 没有在线的村民")
+                
+                # 标记消息为已读
+                elif command == 'read':
+                    if len(parts) >= 2:
+                        try:
+                            message_id = int(parts[1])
+                            self.mark_messages_read(message_id)
+                        except ValueError:
+                            print("\n✗ 消息ID必须是整数")
+                    else:
+                        self.mark_messages_read()
                 
                 # 未知命令
                 else:

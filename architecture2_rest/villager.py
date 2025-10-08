@@ -23,7 +23,8 @@ villager_state = {
     'node_id': None,
     'villager': None,
     'merchant_address': 'localhost:5001',
-    'coordinator_address': 'localhost:5000'
+    'coordinator_address': 'localhost:5000',
+    'messages': []  # 存储接收到的消息
 }
 
 
@@ -725,6 +726,148 @@ def on_time_advance():
     print(f"  可以开始新的行动（工作/睡眠/空闲）")
     
     return jsonify({'success': True, 'message': 'Time updated'})
+
+
+# ==================== 消息系统 API ====================
+
+@app.route('/messages', methods=['GET'])
+def get_messages():
+    """获取所有消息"""
+    return jsonify({
+        'success': True,
+        'messages': villager_state['messages']
+    })
+
+
+@app.route('/messages', methods=['POST'])
+def receive_message():
+    """接收消息（由其他节点或协调器调用）"""
+    try:
+        data = request.json
+        message = {
+            'id': len(villager_state['messages']) + 1,
+            'from': data['from'],
+            'to': data.get('to', 'all'),  # 'all' 表示广播消息
+            'type': data['type'],  # 'private' 或 'broadcast'
+            'content': data['content'],
+            'timestamp': data.get('timestamp', ''),
+            'read': False
+        }
+        
+        villager_state['messages'].append(message)
+        
+        # 打印消息通知
+        if message['type'] == 'broadcast':
+            print(f"[Villager-{villager_state['node_id']}] 📢 收到广播消息: {message['from']}: {message['content']}")
+        else:
+            print(f"[Villager-{villager_state['node_id']}] 💬 收到私聊消息: {message['from']}: {message['content']}")
+        
+        return jsonify({'success': True, 'message': 'Message received'})
+    
+    except Exception as e:
+        return jsonify({'success': False, 'error': str(e)}), 400
+
+
+@app.route('/messages/send', methods=['POST'])
+def send_message():
+    """发送消息"""
+    try:
+        data = request.json
+        target = data['target']  # 目标节点ID或'all'表示广播
+        content = data['content']
+        message_type = data.get('type', 'private')  # 'private' 或 'broadcast'
+        
+        villager = villager_state['villager']
+        if not villager:
+            return jsonify({'success': False, 'message': 'Villager not initialized'}), 400
+        
+        sender_name = villager.name
+        
+        if message_type == 'broadcast':
+            # 通过协调器发送广播消息
+            coordinator_addr = villager_state['coordinator_address']
+            response = requests.post(
+                f"http://{coordinator_addr}/messages/broadcast",
+                json={
+                    'from': villager_state['node_id'],
+                    'from_name': sender_name,
+                    'content': content
+                },
+                timeout=5
+            )
+            
+            if response.status_code == 200:
+                print(f"[Villager-{villager_state['node_id']}] 📢 发送广播消息: {content}")
+                return jsonify({'success': True, 'message': 'Broadcast message sent'})
+            else:
+                return jsonify({'success': False, 'message': 'Failed to send broadcast'}), 500
+        
+        else:
+            # 发送点对点消息
+            # 首先从协调器获取目标节点地址
+            coordinator_addr = villager_state['coordinator_address']
+            nodes_response = requests.get(f"http://{coordinator_addr}/nodes", timeout=5)
+            
+            if nodes_response.status_code != 200:
+                return jsonify({'success': False, 'message': 'Failed to get node list'}), 500
+            
+            nodes_data = nodes_response.json()
+            target_node = None
+            
+            for node in nodes_data['nodes']:
+                if node['node_id'] == target or node.get('name') == target:
+                    target_node = node
+                    break
+            
+            if not target_node:
+                return jsonify({'success': False, 'message': f'Target node not found: {target}'}), 404
+            
+            # 发送消息到目标节点
+            target_response = requests.post(
+                f"http://{target_node['address']}/messages",
+                json={
+                    'from': villager_state['node_id'],
+                    'from_name': sender_name,
+                    'to': target_node['node_id'],
+                    'type': 'private',
+                    'content': content,
+                    'timestamp': ''
+                },
+                timeout=5
+            )
+            
+            if target_response.status_code == 200:
+                print(f"[Villager-{villager_state['node_id']}] 💬 发送私聊消息到 {target}: {content}")
+                return jsonify({'success': True, 'message': 'Private message sent'})
+            else:
+                return jsonify({'success': False, 'message': 'Failed to send private message'}), 500
+    
+    except Exception as e:
+        return jsonify({'success': False, 'error': str(e)}), 500
+
+
+@app.route('/messages/mark_read', methods=['POST'])
+def mark_message_read():
+    """标记消息为已读"""
+    try:
+        data = request.json
+        message_id = data.get('message_id')
+        
+        if message_id:
+            # 标记特定消息为已读
+            for msg in villager_state['messages']:
+                if msg['id'] == message_id:
+                    msg['read'] = True
+                    break
+        else:
+            # 标记所有消息为已读
+            for msg in villager_state['messages']:
+                msg['read'] = True
+        
+        return jsonify({'success': True, 'message': 'Messages marked as read'})
+    
+    except Exception as e:
+        return jsonify({'success': False, 'error': str(e)}), 500
 
 
 def register_to_coordinator(coordinator_addr, port, node_id):
