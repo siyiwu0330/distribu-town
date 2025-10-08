@@ -630,6 +630,88 @@ def reject_trade():
     })
 
 
+@app.route('/trade/confirm', methods=['POST'])
+def confirm_trade():
+    """确认交易（由发起方调用，完成交易）"""
+    villager = villager_state['villager']
+    
+    if not villager:
+        return jsonify({'success': False, 'message': 'Villager not initialized'}), 400
+    
+    data = request.json
+    trade_id = data['trade_id']
+    
+    # 查找待确认的交易
+    if 'pending_trades' not in villager_state:
+        return jsonify({'success': False, 'message': 'No pending trades'}), 400
+    
+    trade = None
+    for t in villager_state['pending_trades']:
+        if t['trade_id'] == trade_id and t.get('status') == 'accepted':
+            trade = t
+            break
+    
+    if not trade:
+        return jsonify({'success': False, 'message': 'Trade not found or not accepted'}), 400
+    
+    # 调用complete_trade完成交易
+    complete_data = {
+        'from': villager_state['node_id'],
+        'item': trade['item'],
+        'quantity': trade['quantity'],
+        'price': trade['price'],
+        'type': trade['offer_type'],
+        'trade_id': trade_id
+    }
+    
+    # 直接调用complete_trade逻辑
+    try:
+        if trade['offer_type'] == 'buy':
+            # 我购买对方的物品
+            if not villager.inventory.remove_money(trade['price']):
+                return jsonify({
+                    'success': False,
+                    'message': f'货币不足 (需要{trade["price"]}, 拥有{villager.inventory.money})'
+                }), 400
+            
+            # 接收物品
+            villager.inventory.add_item(trade['item'], trade['quantity'])
+            
+            print(f"[Villager-{villager_state['node_id']}] 交易完成: 从 {trade['from']} 购买 {trade['quantity']}x {trade['item']}, 支付 {trade['price']}金币")
+            
+        else:  # sell
+            # 我出售物品给对方
+            if not villager.inventory.has_item(trade['item'], trade['quantity']):
+                return jsonify({
+                    'success': False,
+                    'message': f'物品不足: {trade["item"]} (需要{trade["quantity"]})'
+                }), 400
+            
+            # 转移物品和金币
+            villager.inventory.remove_item(trade['item'], trade['quantity'])
+            villager.inventory.add_money(trade['price'])
+            
+            print(f"[Villager-{villager_state['node_id']}] 交易完成: 出售 {trade['quantity']}x {trade['item']} 给 {trade['from']}, 获得 {trade['price']}金币")
+        
+        # 清理pending_trades中的已完成交易
+        villager_state['pending_trades'] = [
+            t for t in villager_state['pending_trades']
+            if t.get('trade_id') != trade_id
+        ]
+        
+        return jsonify({
+            'success': True,
+            'message': 'Trade confirmed and completed',
+            'villager': villager.to_dict()
+        })
+    
+    except Exception as e:
+        return jsonify({
+            'success': False,
+            'message': f'交易确认失败: {str(e)}'
+        }), 500
+
+
 @app.route('/trade/complete', methods=['POST'])
 def complete_trade():
     """完成交易（由发起方调用）"""

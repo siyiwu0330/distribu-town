@@ -10,7 +10,7 @@
 
 1. **村民管理** - 创建和管理虚拟村民（捏人系统）
 2. **生产系统** - 不同职业进行生产活动（木工→住房，农夫→小麦，厨师→面包）
-3. **交易系统** - 村民之间及与商人的交易
+3. **交易系统** - 村民之间及与商人的交易，村民之间的交易
 4. **时间同步** - 全局时间管理（早中晚三个时段）
 5. **资源管理** - 管理体力、货币、物品（木材、小麦、面包、住房）
 
@@ -81,13 +81,13 @@
 每天分为三个时段：
 - **早晨**：1行动点
 - **中午**：1行动点
-- **晚上**：1行动点（可睡眠）
+- **晚上**：1行动点
 
 规则：
 - 生产活动消耗1行动点和体力
 - 交易和吃饭不消耗行动点
-- 晚上睡眠恢复体力（需要住房）
-- 不睡眠工作额外消耗20体力
+- 睡眠恢复体力（需要住房）
+- 晚间不睡眠工作额外消耗20体力
 - 每天结束扣除10体力（饥饿）
 
 ## 快速启动
@@ -125,16 +125,13 @@ bash start_interactive.sh
 在新终端中启动村民节点（每个村民一个终端）：
 
 ```bash
-# 终端A：启动Alice节点
+# 终端A：启动node1节点
 cd /path/to/distribu-town/architecture2_rest
 conda activate distribu-town
-python villager.py --port 5002 --id alice
+python villager.py --port 5002 --id node1
 
-# 终端B：启动Bob节点  
-python villager.py --port 5003 --id bob
-
-# 终端C：启动Charlie节点
-python villager.py --port 5004 --id charlie
+# 终端B：启动node2节点  
+python villager.py --port 5003 --id node2
 ```
 
 ### 连接CLI控制台
@@ -142,23 +139,11 @@ python villager.py --port 5004 --id charlie
 启动村民节点后，在另一个终端连接CLI控制：
 
 ```bash
-# 控制Alice（确保Alice节点已启动在5002端口）
+# 控制node1（确保node1节点已启动在5002端口）
 python interactive_cli.py --port 5002
 
-# 控制Bob（确保Bob节点已启动在5003端口）
+# 控制node2（确保node2节点已启动在5003端口）
 python interactive_cli.py --port 5003
-```
-
-### Docker方式（可选）
-
-```bash
-# 架构1（gRPC微服务）
-cd architecture1_grpc
-docker-compose up --build
-
-# 架构2（RESTful HTTP）
-cd architecture2_rest
-docker-compose up --build
 ```
 
 ## 使用指南
@@ -191,8 +176,8 @@ docker-compose up --build
 - `mytrades` - 查看自己发起的交易请求
 - `accept <ID>` - 接受指定的交易请求
 - `reject <ID>` - 拒绝指定的交易请求
-- `confirm [ID]` - 确认并完成自己发起的交易
-- `cancel [ID]` - 取消自己发起的交易
+- `confirm <ID>` - 确认并完成自己发起的交易
+- `cancel <ID>` - 取消自己发起的交易
 
 ### 典型工作流程
 
@@ -221,12 +206,14 @@ sleep                    # 睡眠（自动提交sleep）
 ```bash
 # 村民A发起交易
 trade node2 buy wheat 5 10
+mytrades                  # 查看发送的请求
 
 # 村民B查看并接受
 trades                    # 查看收到的请求
 accept trade_0            # 接受交易
 
 # 村民A完成交易
+mytrades                  # 查询交易请求是否被接受
 confirm trade_0           # 完成交易
 ```
 
@@ -277,20 +264,6 @@ curl -X POST http://localhost:5002/action/trade \
 curl -X POST http://localhost:5002/trade/request \
   -H "Content-Type: application/json" \
   -d '{"target":"node2","item":"wheat","quantity":5,"price":10}'
-```
-
-## 性能测试
-
-```bash
-# 测试架构1
-cd performance_tests
-python test_grpc.py
-
-# 测试架构2
-python test_rest.py
-
-# 生成对比报告
-python compare_results.py
 ```
 
 ## 项目结构
@@ -397,7 +370,4 @@ curl http://localhost:5002/villager
 - 交互式CLI界面
 - Docker配置优化
 
-## 许可证
-
-MIT License
 
