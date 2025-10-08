@@ -252,8 +252,29 @@ class AIVillagerAgent:
                 quantity = kwargs.get('quantity')
                 price = kwargs.get('price')
                 
-                # 发送交易请求
-                response = requests.post(f"{self.villager_url}/trade/request", 
+                # 首先从协调器获取目标节点地址
+                coordinator_addr = villager_state.get('coordinator_address', 'localhost:5000')
+                nodes_response = requests.get(f"http://{coordinator_addr}/nodes", timeout=5)
+                
+                if nodes_response.status_code != 200:
+                    print(f"[AI Agent] ✗ 获取节点列表失败: HTTP {nodes_response.status_code}")
+                    return False
+                
+                nodes_data = nodes_response.json()
+                target_node = None
+                
+                # 查找目标节点（支持节点ID和村民名称）
+                for node in nodes_data['nodes']:
+                    if node['node_id'] == target or node.get('name') == target:
+                        target_node = node
+                        break
+                
+                if not target_node:
+                    print(f"[AI Agent] ✗ 找不到目标节点: {target}")
+                    return False
+                
+                # 发送交易请求到目标节点
+                response = requests.post(f"http://{target_node['address']}/trade/request", 
                                         json={
                                             'from': self.villager_name,
                                             'from_address': f'localhost:{self.villager_port}',
@@ -807,8 +828,9 @@ Make smart decisions based on the above information:
    - **ACTIVE TRADING**: Look for opportunities to trade with other villagers!
      * If you have excess items, offer them for sale to other villagers
      * If you need resources, try buying from other villagers (may be cheaper than merchant)
-     * Use 'trade <villager> buy/sell <item> <quantity> <price>' to initiate trades
+     * Use 'trade <node_id> buy/sell <item> <quantity> <total_price>' to initiate trades
      * Check 'villagers' to see who's online and their occupations
+     * IMPORTANT: Use node IDs (node1, node2) not names!
 
 4. TRADING OPPORTUNITIES:
    - **Farmer**: Sell wheat to chefs, buy seeds from other farmers
@@ -825,11 +847,14 @@ Make smart decisions based on the above information:
    - Only idle if no better options
 
 6. TRADING EXAMPLES:
-   - "trade bob sell wheat 5 80" → Offer to sell 5 wheat to Bob for 80 gold
-   - "trade alice buy seed 2 15" → Offer to buy 2 seeds from Alice for 15 gold
+   - "trade node2 sell wheat 5 80" → Sell 5 wheat to node2 for 80 gold total
+   - "trade node1 buy seed 2 15" → Buy 2 seeds from node1 for 15 gold total
    - "trades" → Check incoming trade requests
    - "accept trade_0" → Accept a trade request
    - "confirm trade_0" → Complete a trade after acceptance
+   
+   IMPORTANT: Use node IDs (node1, node2, etc.) not names for trading!
+   IMPORTANT: Price is TOTAL price, not per-unit price!
 
 CRITICAL: After buying resources, ALWAYS produce in the same segment!
 CRITICAL: Look for trading opportunities with other villagers!
@@ -912,15 +937,26 @@ Return JSON decision format."""
                                 "command": action_line
                             }
                         elif action == "trade" and len(parts) >= 6:
+                            # 正确的格式: trade <节点ID> <buy/sell> <物品> <数量> <总价>
+                            trade_action = parts[2].lower()
+                            if trade_action not in ['buy', 'sell']:
+                                # 如果使用了错误的动作，尝试修正
+                                if trade_action in ['offer', 'purchase']:
+                                    trade_action = 'buy'
+                                elif trade_action in ['sell_to', 'give']:
+                                    trade_action = 'sell'
+                                else:
+                                    trade_action = 'buy'  # 默认
+                            
                             return {
                                 "action": "trade",
                                 "reason": reason,
                                 "command": action_line,
                                 "target": parts[1],
-                                "trade_action": parts[2],
+                                "trade_action": trade_action,
                                 "item": parts[3],
                                 "quantity": int(parts[4]),
-                                "price": int(parts[5])
+                                "price": int(parts[5])  # 总价
                             }
                         else:
                             return {
