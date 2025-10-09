@@ -874,6 +874,7 @@ You must follow the ReAct (Reasoning + Acting) pattern:
 
 **CRITICAL**: Don't just negotiate - always follow up with actual trade requests!
 **REMEMBER**: `trades` shows what you received, `trade` sends what you want to offer!
+**IMPORTANT**: When you see trade requests in `trades`, decide whether to accept or reject them!
 
 ## Output Format:
 Always follow this exact format:
@@ -1081,7 +1082,7 @@ Messages: {len(messages)} received
 {chr(10).join([f"- From {msg.get('from', 'Unknown')}: {msg.get('content', '')[:50]}..." for msg in messages[:3]]) if messages else "No messages"}
 
 Trades: {len(trades_received)} received, {len(trades_sent)} sent
-{chr(10).join([f"- Trade {trade.get('trade_id', '')}: {trade.get('offer_type', '')} {trade.get('item', '')} x{trade.get('quantity', 0)} for {trade.get('price', 0)} gold from {trade.get('from', 'Unknown')}" for trade in trades_received[:3]]) if trades_received else "No trade requests"}
+{chr(10).join([f"- Trade {trade.get('trade_id', '')}: {trade.get('from', 'Unknown')} wants to {trade.get('offer_type', '')} {trade.get('item', '')} x{trade.get('quantity', 0)} for {trade.get('price', 0)} gold total ({trade.get('price', 0)//trade.get('quantity', 1)} gold each)" for trade in trades_received[:3]]) if trades_received else "No trade requests"}
 
 Online Villagers: {len(villagers)}
 {chr(10).join([f"- {v['name']} ({v['occupation']}) - Action: {'✓ Submitted' if v.get('has_submitted_action', False) else '⏳ Pending'}" for v in villagers])}
@@ -1259,7 +1260,7 @@ Messages Received: {len(messages)}
 
 === TRADES ===
 Trades Received: {len(trades_received)}
-{chr(10).join([f"- Trade {trade.get('trade_id', '')}: {trade.get('offer_type', '')} {trade.get('item', '')} x{trade.get('quantity', 0)} for {trade.get('price', 0)} gold from {trade.get('from', 'Unknown')}" for trade in trades_received[:3]]) if trades_received else "No trade requests"}
+{chr(10).join([f"- Trade {trade.get('trade_id', '')}: {trade.get('from', 'Unknown')} wants to {trade.get('offer_type', '')} {trade.get('item', '')} x{trade.get('quantity', 0)} for {trade.get('price', 0)} gold total ({trade.get('price', 0)//trade.get('quantity', 1)} gold each)" for trade in trades_received[:3]]) if trades_received else "No trade requests"}
 
 Trades Sent: {len(trades_sent)}
 {chr(10).join([f"- Trade {trade.get('id', '')}: {trade.get('action', '')} {trade.get('item', '')} x{trade.get('quantity', 0)} for {trade.get('price', 0)} gold" for trade in trades_sent[:3]]) if trades_sent else "No sent trades"}
