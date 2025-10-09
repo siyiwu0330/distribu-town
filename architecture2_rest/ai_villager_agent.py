@@ -1074,7 +1074,7 @@ Messages: {len(messages)} received
 {chr(10).join([f"- From {msg.get('from', 'Unknown')}: {msg.get('content', '')[:50]}..." for msg in messages[:3]]) if messages else "No messages"}
 
 Trades: {len(trades_received)} received, {len(trades_sent)} sent
-{chr(10).join([f"- Trade {trade.get('id', '')}: {trade.get('action', '')} {trade.get('item', '')} x{trade.get('quantity', 0)} for {trade.get('price', 0)} gold" for trade in trades_received[:3]]) if trades_received else "No trade requests"}
+{chr(10).join([f"- Trade {trade.get('trade_id', '')}: {trade.get('offer_type', '')} {trade.get('item', '')} x{trade.get('quantity', 0)} for {trade.get('price', 0)} gold from {trade.get('from', 'Unknown')}" for trade in trades_received[:3]]) if trades_received else "No trade requests"}
 
 Online Villagers: {len(villagers)}
 {chr(10).join([f"- {v['name']} ({v['occupation']}) - Action: {'✓ Submitted' if v.get('has_submitted_action', False) else '⏳ Pending'}" for v in villagers])}
@@ -1252,7 +1252,7 @@ Messages Received: {len(messages)}
 
 === TRADES ===
 Trades Received: {len(trades_received)}
-{chr(10).join([f"- Trade {trade.get('id', '')}: {trade.get('action', '')} {trade.get('item', '')} x{trade.get('quantity', 0)} for {trade.get('price', 0)} gold" for trade in trades_received[:3]]) if trades_received else "No trade requests"}
+{chr(10).join([f"- Trade {trade.get('trade_id', '')}: {trade.get('offer_type', '')} {trade.get('item', '')} x{trade.get('quantity', 0)} for {trade.get('price', 0)} gold from {trade.get('from', 'Unknown')}" for trade in trades_received[:3]]) if trades_received else "No trade requests"}
 
 Trades Sent: {len(trades_sent)}
 {chr(10).join([f"- Trade {trade.get('id', '')}: {trade.get('action', '')} {trade.get('item', '')} x{trade.get('quantity', 0)} for {trade.get('price', 0)} gold" for trade in trades_sent[:3]]) if trades_sent else "No sent trades"}
@@ -1408,6 +1408,28 @@ Return JSON decision format."""
                                 "action": "mytrades",
                                 "reason": reason,
                                 "command": action_line
+                            }
+                        elif action == "accept" and len(parts) >= 2:
+                            # 格式: accept trade_1 或 accept 1
+                            trade_id = parts[1]
+                            if not trade_id.startswith('trade_'):
+                                trade_id = f"trade_{trade_id}"
+                            return {
+                                "action": "accept",
+                                "reason": reason,
+                                "command": action_line,
+                                "trade_id": trade_id
+                            }
+                        elif action == "reject" and len(parts) >= 2:
+                            # 格式: reject trade_1 或 reject 1
+                            trade_id = parts[1]
+                            if not trade_id.startswith('trade_'):
+                                trade_id = f"trade_{trade_id}"
+                            return {
+                                "action": "reject",
+                                "reason": reason,
+                                "command": action_line,
+                                "trade_id": trade_id
                             }
                         elif action == "trade" and len(parts) >= 6:
                             # 正确的格式: trade <节点ID> <buy/sell> <物品> <数量> <总价>
