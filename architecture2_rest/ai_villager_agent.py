@@ -381,12 +381,14 @@ class AIVillagerAgent:
             can_trade = True
             reason = ""
             
-            if villager_data.get('has_submitted_action', False):
-                can_trade = False
-                reason = "目标村民已提交行动，处于等待状态"
-            elif villager_data.get('stamina', 0) < 20:
+            # 只有体力不足时才无法交易，已提交行动不影响交易
+            if villager_data.get('stamina', 0) < 20:
                 can_trade = False
                 reason = "目标村民体力不足，无法交易"
+            elif villager_data.get('has_submitted_action', False):
+                # 已提交行动但仍可交易，只是提醒状态
+                can_trade = True
+                reason = "目标村民已提交行动，但可以交易"
             
             return {
                 "node_id": node_id,
