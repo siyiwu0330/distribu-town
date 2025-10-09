@@ -135,7 +135,7 @@ class AIVillagerAgent:
             return []
     
     def get_online_villagers(self) -> List[Dict]:
-        """获取在线村民列表"""
+        """获取在线村民列表（包含提交状态）"""
         try:
             response = requests.get(f"{self.coordinator_url}/nodes", timeout=5)
             if response.status_code == 200:
@@ -143,11 +143,42 @@ class AIVillagerAgent:
                 villagers = []
                 for node in nodes_data['nodes']:
                     if node['node_type'] == 'villager':
-                        villagers.append({
-                            'node_id': node['node_id'],
-                            'name': node.get('name', node['node_id']),
-                            'occupation': node.get('occupation', 'unknown')
-                        })
+                        # 获取村民的详细状态
+                        try:
+                            villager_response = requests.get(f"http://{node['address']}/villager", timeout=3)
+                            if villager_response.status_code == 200:
+                                villager_data = villager_response.json()
+                                villagers.append({
+                                    'node_id': node['node_id'],
+                                    'name': villager_data.get('name', node['node_id']),
+                                    'occupation': villager_data.get('occupation', 'unknown'),
+                                    'has_submitted_action': villager_data.get('has_submitted_action', False),
+                                    'stamina': villager_data.get('stamina', 0),
+                                    'inventory': villager_data.get('inventory', {}),
+                                    'address': node['address']
+                                })
+                            else:
+                                # 如果无法获取详细状态，使用基本信息
+                                villagers.append({
+                                    'node_id': node['node_id'],
+                                    'name': node.get('name', node['node_id']),
+                                    'occupation': node.get('occupation', 'unknown'),
+                                    'has_submitted_action': False,
+                                    'stamina': 0,
+                                    'inventory': {},
+                                    'address': node['address']
+                                })
+                        except Exception as e:
+                            # 如果获取详细状态失败，使用基本信息
+                            villagers.append({
+                                'node_id': node['node_id'],
+                                'name': node.get('name', node['node_id']),
+                                'occupation': node.get('occupation', 'unknown'),
+                                'has_submitted_action': False,
+                                'stamina': 0,
+                                'inventory': {},
+                                'address': node['address']
+                            })
                 return villagers
             return []
         except Exception as e:
@@ -425,6 +456,79 @@ class AIVillagerAgent:
         
         for key in old_keys:
             del self.sent_trades_tracker[key]
+    
+    def _handle_pending_trades(self, trades_received: List[Dict], context: Dict):
+        """处理待处理的交易请求"""
+        villager = context.get('villager', {})
+        inventory = villager.get('inventory', {}).get('items', {})
+        money = villager.get('inventory', {}).get('money', 0)
+        occupation = villager.get('occupation', '')
+        
+        for trade in trades_received:
+            trade_id = trade.get('trade_id', '')
+            item = trade.get('item', '')
+            quantity = trade.get('quantity', 0)
+            price = trade.get('price', 0)
+            offer_type = trade.get('offer_type', '')
+            from_villager = trade.get('from', '')
+            
+            print(f"[AI Agent] {self.villager_name} 处理交易请求: {offer_type} {quantity}x {item} for {price} gold from {from_villager}")
+            
+            # 简单的交易决策逻辑
+            should_accept = False
+            reason = ""
+            
+            if offer_type == 'buy':
+                # 对方想买我的物品
+                if inventory.get(item, 0) >= quantity:
+                    # 检查价格是否合理
+                    merchant_prices = context.get('prices', {}).get('prices', {})
+                    merchant_buy_price = merchant_prices.get(item, 0) * quantity
+                    
+                    if price >= merchant_buy_price * 0.8:  # 至少是商人价格的80%
+                        should_accept = True
+                        reason = f"价格合理 ({price} >= {merchant_buy_price * 0.8})"
+                    else:
+                        reason = f"价格太低 ({price} < {merchant_buy_price * 0.8})"
+                else:
+                    reason = f"物品不足 ({inventory.get(item, 0)} < {quantity})"
+            
+            elif offer_type == 'sell':
+                # 对方想卖物品给我
+                if money >= price:
+                    # 检查价格是否合理
+                    merchant_prices = context.get('prices', {}).get('prices', {})
+                    merchant_sell_price = merchant_prices.get(item, 0) * quantity
+                    
+                    if price <= merchant_sell_price * 1.2:  # 最多是商人价格的120%
+                        should_accept = True
+                        reason = f"价格合理 ({price} <= {merchant_sell_price * 1.2})"
+                    else:
+                        reason = f"价格太高 ({price} > {merchant_sell_price * 1.2})"
+                else:
+                    reason = f"货币不足 ({money} < {price})"
+            
+            # 执行交易决策
+            if should_accept:
+                print(f"[AI Agent] {self.villager_name} 接受交易: {reason}")
+                try:
+                    success = self.execute_action("accept_trade", trade_id=trade_id)
+                    if success:
+                        print(f"[AI Agent] ✓ 交易接受成功")
+                    else:
+                        print(f"[AI Agent] ✗ 交易接受失败")
+                except Exception as e:
+                    print(f"[AI Agent] ✗ 交易接受异常: {e}")
+            else:
+                print(f"[AI Agent] {self.villager_name} 拒绝交易: {reason}")
+                try:
+                    success = self.execute_action("reject_trade", trade_id=trade_id)
+                    if success:
+                        print(f"[AI Agent] ✓ 交易拒绝成功")
+                    else:
+                        print(f"[AI Agent] ✗ 交易拒绝失败")
+                except Exception as e:
+                    print(f"[AI Agent] ✗ 交易拒绝异常: {e}")
     
     def create_villager(self, name: str, occupation: str, gender: str, personality: str) -> bool:
         """创建村民"""
@@ -733,6 +837,12 @@ You must follow the ReAct (Reasoning + Acting) pattern:
 - Hunger: -10 stamina daily, -20 extra if no sleep at night
 - **CRITICAL: Sleep requires a HOUSE! You cannot sleep without a house.**
 - **IMPORTANT: Buy and produce are SEPARATE decisions! Buy resources first, then produce in the next decision.**
+- **ACTION SUBMISSION STATUS: If you have already submitted your action for this time segment, you can still:**
+  - Respond to trade requests (accept/reject)
+  - Send and read messages
+  - Eat bread to restore stamina
+  - Check prices and trades
+  - **BUT CANNOT: produce, sleep, buy, sell, or idle (these consume action points)**
 
 ## P2P Trading Strategy (HIGHEST PRIORITY):
 - **Selling**: Always try to sell products to villagers at better prices than merchant buy prices
@@ -962,7 +1072,12 @@ Trades: {len(trades_received)} received, {len(trades_sent)} sent
 {chr(10).join([f"- Trade {trade.get('id', '')}: {trade.get('action', '')} {trade.get('item', '')} x{trade.get('quantity', 0)} for {trade.get('price', 0)} gold" for trade in trades_received[:3]]) if trades_received else "No trade requests"}
 
 Online Villagers: {len(villagers)}
-{chr(10).join([f"- {v['name']} ({v['occupation']})" for v in villagers])}
+{chr(10).join([f"- {v['name']} ({v['occupation']}) - Action: {'✓ Submitted' if v.get('has_submitted_action', False) else '⏳ Pending'}" for v in villagers])}
+
+=== ACTION SUBMISSION STATUS ===
+Total Villagers: {len(villagers)}
+Submitted: {sum(1 for v in villagers if v.get('has_submitted_action', False))}/{len(villagers)}
+Waiting: {[v['name'] for v in villagers if not v.get('has_submitted_action', False)]}
 
 === PREVIOUS OBSERVATIONS ===
 {self._get_recent_observations()}
@@ -1139,7 +1254,12 @@ Trades Sent: {len(trades_sent)}
 
 === ONLINE VILLAGERS ===
 Online Villagers: {len(villagers)}
-{chr(10).join([f"- {v['name']} ({v['occupation']})" for v in villagers])}
+{chr(10).join([f"- {v['name']} ({v['occupation']}) - Action: {'✓ Submitted' if v.get('has_submitted_action', False) else '⏳ Pending'}" for v in villagers])}
+
+=== ACTION SUBMISSION STATUS ===
+Total Villagers: {len(villagers)}
+Submitted: {sum(1 for v in villagers if v.get('has_submitted_action', False))}/{len(villagers)}
+Waiting: {[v['name'] for v in villagers if not v.get('has_submitted_action', False)]}
 
 === P2P TRADING OPPORTUNITIES ===
 {self._format_p2p_opportunities(context.get('p2p_opportunities', {}))}
@@ -1416,8 +1536,32 @@ Return JSON decision format."""
         
         # 检查是否已经提交了行动
         villager = context['villager']
-        if villager.get('has_submitted_action', False):
-            print(f"[AI Agent] {self.villager_name} 已经提交了行动，等待时间推进...")
+        has_submitted = villager.get('has_submitted_action', False)
+        
+        if has_submitted:
+            print(f"[AI Agent] {self.villager_name} 已经提交了行动，检查是否有消息或交易需要处理...")
+            
+            # 检查是否有待处理的交易请求
+            trades_received = context.get('trades_received', [])
+            if trades_received:
+                print(f"[AI Agent] {self.villager_name} 发现 {len(trades_received)} 个待处理的交易请求")
+                # 处理交易请求（自动接受合理的交易）
+                self._handle_pending_trades(trades_received, context)
+            
+            # 检查是否有新消息
+            messages = context.get('messages', [])
+            unread_messages = [msg for msg in messages if not msg.get('read', False)]
+            if unread_messages:
+                print(f"[AI Agent] {self.villager_name} 发现 {len(unread_messages)} 条未读消息")
+                # 标记消息为已读
+                for msg in unread_messages:
+                    try:
+                        requests.post(f"{self.villager_url}/messages/mark_read",
+                                   json={'message_id': msg.get('id')}, timeout=5)
+                    except:
+                        pass
+            
+            print(f"[AI Agent] {self.villager_name} 已完成消息和交易处理，等待时间推进...")
             return
         
         # 生成决策
