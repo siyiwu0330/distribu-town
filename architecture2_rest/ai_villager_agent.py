@@ -102,20 +102,40 @@ class AIVillagerAgent:
             return None
     
     def get_trades_received(self) -> List[Dict]:
-        """获取收到的交易请求"""
+        """获取收到的交易请求（从Merchant中心化系统）"""
         try:
-            response = requests.get(f"{self.villager_url}/trade/pending", timeout=5)
+            # 获取自己的node_id
+            villager_state = self.get_villager_status() or {}
+            my_node_id = villager_state.get('node_id')
+            
+            if not my_node_id:
+                return []
+            
+            # 从Merchant查询收到的交易（type='pending'表示收到的待处理交易）
+            response = requests.get(f"{self.merchant_url}/trade/list",
+                                  params={'node_id': my_node_id, 'type': 'pending'},
+                                  timeout=5)
             if response.status_code == 200:
-                return response.json().get('pending_trades', [])
+                return response.json().get('trades', [])
             return []
         except Exception as e:
             print(f"[AI Agent] 获取交易请求失败: {e}")
             return []
     
     def get_trades_sent(self) -> List[Dict]:
-        """获取发送的交易请求"""
+        """获取发送的交易请求（从Merchant中心化系统）"""
         try:
-            response = requests.get(f"{self.villager_url}/mytrades", timeout=5)
+            # 获取自己的node_id
+            villager_state = self.get_villager_status() or {}
+            my_node_id = villager_state.get('node_id')
+            
+            if not my_node_id:
+                return []
+            
+            # 从Merchant查询发送的交易（type='sent'表示自己发起的交易）
+            response = requests.get(f"{self.merchant_url}/trade/list",
+                                  params={'node_id': my_node_id, 'type': 'sent'},
+                                  timeout=5)
             if response.status_code == 200:
                 return response.json().get('trades', [])
             return []
@@ -433,9 +453,19 @@ class AIVillagerAgent:
             return False
     
     def has_sent_trade_request(self, target: str, item: str, quantity: int, price: int) -> bool:
-        """检查是否已经发送过相同的交易请求"""
-        trade_key = f"{target}_{item}_{quantity}_{price}"
-        return trade_key in self.sent_trades_tracker
+        """检查是否已经发送过相同的交易请求（仅检查pending状态的交易）"""
+        # 从Merchant查询实际的sent trades
+        trades_sent = self.get_trades_sent()
+        
+        # 只检查pending或accepted状态的交易（completed/rejected的不算）
+        for trade in trades_sent:
+            if (trade.get('target_id') == target and 
+                trade.get('item') == item and 
+                trade.get('quantity') == quantity and 
+                trade.get('price') == price and
+                trade.get('status') in ['pending', 'accepted']):
+                return True
+        return False
     
     def mark_trade_request_sent(self, target: str, item: str, quantity: int, price: int):
         """标记交易请求已发送"""
@@ -482,7 +512,8 @@ class AIVillagerAgent:
             
             if offer_type == 'buy':
                 # 对方想买我的物品
-                if inventory.get(item, 0) >= quantity:
+                available_quantity = inventory.get(item, 0)
+                if available_quantity >= quantity:
                     # 检查价格是否合理
                     merchant_prices = context.get('prices', {}).get('prices', {})
                     merchant_buy_price = merchant_prices.get(item, 0) * quantity
@@ -493,7 +524,7 @@ class AIVillagerAgent:
                     else:
                         reason = f"价格太低 ({price} < {merchant_buy_price * 0.8})"
                 else:
-                    reason = f"物品不足 ({inventory.get(item, 0)} < {quantity})"
+                    reason = f"物品不足: {item} (需要{quantity}, 拥有{available_quantity})"
             
             elif offer_type == 'sell':
                 # 对方想卖物品给我
@@ -512,15 +543,19 @@ class AIVillagerAgent:
             
             # 执行交易决策
             if should_accept:
-                print(f"[AI Agent] {self.villager_name} 接受交易: {reason}")
+                print(f"[AI Agent] {self.villager_name} 准备交易: {reason}")
                 try:
-                    success = self.execute_action("accept_trade", trade_id=trade_id)
+                    success = self.execute_action("prepare_trade", trade_id=trade_id)
                     if success:
-                        print(f"[AI Agent] ✓ 交易接受成功")
+                        print(f"[AI Agent] ✓ 交易准备成功")
+                        # 发送消息通知发起方交易已准备就绪
+                        message = f"交易 {trade_id} 已准备就绪！请使用 'commit {trade_id}' 来提交交易。"
+                        self.execute_action("send_message", target=from_villager, content=message)
+                        print(f"[AI Agent] {self.villager_name} 已通知 {from_villager} 交易准备就绪")
                     else:
-                        print(f"[AI Agent] ✗ 交易接受失败")
+                        print(f"[AI Agent] ✗ 交易准备失败")
                 except Exception as e:
-                    print(f"[AI Agent] ✗ 交易接受异常: {e}")
+                    print(f"[AI Agent] ✗ 交易准备异常: {e}")
             else:
                 print(f"[AI Agent] {self.villager_name} 拒绝交易: {reason}")
                 try:
@@ -531,6 +566,31 @@ class AIVillagerAgent:
                         print(f"[AI Agent] ✗ 交易拒绝失败")
                 except Exception as e:
                     print(f"[AI Agent] ✗ 交易拒绝异常: {e}")
+    
+    def _handle_sent_trades_confirmation(self, trades_sent: List[Dict], context: Dict):
+        """处理已发送交易（两阶段提交）"""
+        for trade in trades_sent:
+            trade_id = trade.get('trade_id', '')
+            status = trade.get('status', 'pending')
+            
+            if status == 'prepared':
+                print(f"[AI Agent] {self.villager_name} 发现已准备的交易 {trade_id}，尝试提交...")
+                try:
+                    result = self.execute_action("commit_trade", trade_id=trade_id)
+                    if isinstance(result, tuple):
+                        success, error_message = result
+                    else:
+                        success = result
+                        error_message = None
+                    
+                    if success:
+                        print(f"[AI Agent] ✓ {self.villager_name} 成功提交交易 {trade_id}")
+                    else:
+                        print(f"[AI Agent] ✗ {self.villager_name} 提交交易失败: {error_message}")
+                except Exception as e:
+                    print(f"[AI Agent] ✗ {self.villager_name} 提交交易异常: {e}")
+            elif status == 'pending':
+                print(f"[AI Agent] {self.villager_name} 等待交易 {trade_id} 准备就绪...")
     
     def create_villager(self, name: str, occupation: str, gender: str, personality: str) -> bool:
         """创建村民"""
@@ -609,7 +669,18 @@ class AIVillagerAgent:
                     print(f"[AI Agent] ✗ 获取价格失败: HTTP {response.status_code}")
                     return False
             elif action == "trades":
-                response = requests.get(f"{self.villager_url}/trade/pending", timeout=10)
+                # 从Merchant查询收到的交易
+                villager_state = self.get_villager_status() or {}
+                my_node_id = villager_state.get('node_id')
+                
+                if not my_node_id:
+                    print(f"[AI Agent] ✗ 无法获取node_id")
+                    return False
+                
+                merchant_url = f"http://localhost:5001"
+                response = requests.get(f"{merchant_url}/trade/list",
+                                      params={'node_id': my_node_id, 'type': 'pending'},
+                                      timeout=10)
                 if response.status_code == 200:
                     trades_data = response.json()
                     print(f"[AI Agent] 收到的交易请求: {trades_data}")
@@ -618,7 +689,18 @@ class AIVillagerAgent:
                     print(f"[AI Agent] ✗ 获取交易请求失败: HTTP {response.status_code}")
                     return False
             elif action == "mytrades":
-                response = requests.get(f"{self.villager_url}/mytrades", timeout=10)
+                # 从Merchant查询发送的交易
+                villager_state = self.get_villager_status() or {}
+                my_node_id = villager_state.get('node_id')
+                
+                if not my_node_id:
+                    print(f"[AI Agent] ✗ 无法获取node_id")
+                    return False
+                
+                merchant_url = f"http://localhost:5001"
+                response = requests.get(f"{merchant_url}/trade/list",
+                                      params={'node_id': my_node_id, 'type': 'sent'},
+                                      timeout=10)
                 if response.status_code == 200:
                     trades_data = response.json()
                     print(f"[AI Agent] 发送的交易请求: {trades_data}")
@@ -627,6 +709,7 @@ class AIVillagerAgent:
                     print(f"[AI Agent] ✗ 获取发送交易失败: HTTP {response.status_code}")
                     return False
             elif action == "trade":
+                # 新的中心化交易系统：通过Merchant创建交易
                 target = kwargs.get('target')
                 trade_action = kwargs.get('trade_action', 'buy')
                 item = kwargs.get('item')
@@ -648,9 +731,15 @@ class AIVillagerAgent:
                     print(f"[AI Agent] ⚠️ 目标村民无法交易: {target_status.get('reason', 'Unknown reason')}")
                     return False
                 
-                # 首先从协调器获取目标节点地址
+                # 从协调器获取目标节点地址和自己的node_id
                 villager_state = self.get_villager_status() or {}
                 coordinator_addr = villager_state.get('coordinator_address', 'localhost:5000')
+                my_node_id = villager_state.get('node_id')
+                
+                if not my_node_id:
+                    print(f"[AI Agent] ✗ 无法获取自己的node_id")
+                    return False
+                
                 nodes_response = requests.get(f"http://{coordinator_addr}/nodes", timeout=5)
                 
                 if nodes_response.status_code != 200:
@@ -670,45 +759,29 @@ class AIVillagerAgent:
                     print(f"[AI Agent] ✗ 找不到目标节点: {target}")
                     return False
                 
-                # 发送交易请求到目标节点
-                response = requests.post(f"http://{target_node['address']}/trade/request", 
+                # 通过Merchant创建交易
+                merchant_url = f"http://localhost:5001"  # Merchant默认端口
+                response = requests.post(f"{merchant_url}/trade/create", 
                                         json={
-                                            'from': self.villager_name,
-                                            'from_address': f'localhost:{self.villager_port}',
+                                            'initiator_id': my_node_id,
+                                            'initiator_address': f'localhost:{self.villager_port}',
+                                            'target_id': target_node['node_id'],
+                                            'target_address': target_node['address'],
+                                            'offer_type': trade_action,
                                             'item': item,
                                             'quantity': quantity,
-                                            'price': price,
-                                            'offer_type': trade_action
+                                            'price': price
                                         }, timeout=10)
+                
                 if response.status_code == 200:
                     trade_data = response.json()
-                    print(f"[AI Agent] 交易请求已发送: {trade_action} {quantity}x {item} for {price} gold to {target}")
+                    trade_id = trade_data.get('trade_id')
+                    print(f"[AI Agent] 交易已创建: {trade_id} - {trade_action} {quantity}x {item} for {price} gold to {target}")
                     # 标记交易请求已发送
                     self.mark_trade_request_sent(target, item, quantity, price)
-                    
-                    # 将交易记录添加到 villager 节点的 sent_trades 中
-                    try:
-                        sent_trade_record = {
-                            'trade_id': trade_data.get('trade_id', f"trade_{int(time.time())}"),
-                            'target': target,
-                            'target_name': target_status.get('name', target),
-                            'item': item,
-                            'quantity': quantity,
-                            'price': price,
-                            'action': trade_action,
-                            'timestamp': time.time(),
-                            'status': 'pending'
-                        }
-                        
-                        # 发送到 villager 节点记录
-                        requests.post(f"{self.villager_url}/sent_trades/add",
-                                   json=sent_trade_record, timeout=5)
-                    except Exception as e:
-                        print(f"[AI Agent] 记录发送交易失败: {e}")
-                    
                     return True
                 else:
-                    print(f"[AI Agent] ✗ 发送交易请求失败: HTTP {response.status_code}")
+                    print(f"[AI Agent] ✗ 创建交易失败: HTTP {response.status_code}")
                     return False
             elif action == "send_message":
                 target = kwargs.get('target')
@@ -716,18 +789,69 @@ class AIVillagerAgent:
                 message_type = kwargs.get('type', 'private')
                 response = requests.post(f"{self.villager_url}/messages/send",
                                        json={'target': target, 'content': content, 'type': message_type}, timeout=10)
+                if response.status_code != 200:
+                    try:
+                        error_data = response.json()
+                        error_message = error_data.get('message', f'HTTP {response.status_code}')
+                    except:
+                        error_message = f'HTTP {response.status_code}'
+                    return False, error_message
             elif action == "accept_trade":
+                # 通过Merchant接受交易
                 trade_id = kwargs.get('trade_id')
-                response = requests.post(f"{self.villager_url}/trade/accept",
-                                       json={'trade_id': trade_id}, timeout=10)
-            elif action == "reject_trade":
-                trade_id = kwargs.get('trade_id')
-                response = requests.post(f"{self.villager_url}/trade/reject",
-                                       json={'trade_id': trade_id}, timeout=10)
+                villager_state = self.get_villager_status() or {}
+                my_node_id = villager_state.get('node_id')
+                
+                if not my_node_id:
+                    print(f"[AI Agent] ✗ 无法获取node_id")
+                    return False
+                
+                merchant_url = f"http://localhost:5001"
+                response = requests.post(f"{merchant_url}/trade/accept",
+                                       json={'trade_id': trade_id, 'node_id': my_node_id}, 
+                                       timeout=10)
             elif action == "confirm_trade":
+                # 通过Merchant确认交易
                 trade_id = kwargs.get('trade_id')
-                response = requests.post(f"{self.villager_url}/trade/confirm",
-                                       json={'trade_id': trade_id}, timeout=10)
+                villager_state = self.get_villager_status() or {}
+                my_node_id = villager_state.get('node_id')
+                
+                if not my_node_id:
+                    print(f"[AI Agent] ✗ 无法获取node_id")
+                    return False
+                
+                merchant_url = f"http://localhost:5001"
+                response = requests.post(f"{merchant_url}/trade/confirm",
+                                       json={'trade_id': trade_id, 'node_id': my_node_id}, 
+                                       timeout=10)
+            elif action == "reject_trade":
+                # 通过Merchant拒绝交易
+                trade_id = kwargs.get('trade_id')
+                villager_state = self.get_villager_status() or {}
+                my_node_id = villager_state.get('node_id')
+                
+                if not my_node_id:
+                    print(f"[AI Agent] ✗ 无法获取node_id")
+                    return False
+                
+                merchant_url = f"http://localhost:5001"
+                response = requests.post(f"{merchant_url}/trade/reject",
+                                       json={'trade_id': trade_id, 'node_id': my_node_id}, 
+                                       timeout=10)
+            elif action == "cancel_trade":
+                # 通过Merchant取消交易
+                trade_id = kwargs.get('trade_id')
+                villager_state = self.get_villager_status() or {}
+                my_node_id = villager_state.get('node_id')
+                
+                if not my_node_id:
+                    print(f"[AI Agent] ✗ 无法获取node_id")
+                    return False
+                
+                merchant_url = f"http://localhost:5001"
+                response = requests.post(f"{merchant_url}/trade/cancel",
+                                       json={'trade_id': trade_id, 'node_id': my_node_id}, 
+                                       timeout=10)
             else:
                 print(f"[AI Agent] ✗ 未知行动: {action}")
                 return False
@@ -775,6 +899,22 @@ class AIVillagerAgent:
             print(f"  发送交易: {len(context.get('trades_sent', []))} 条")
             print(f"  已提交行动: {context.get('villager', {}).get('has_submitted_action', False)}")
             print(f"  其他村民状态: {[(v['name'], v.get('has_submitted_action', False)) for v in context.get('villagers', [])]}")
+            
+            # 显示详细的交易信息
+            trades_received = context.get('trades_received', [])
+            if trades_received:
+                print(f"[AI Agent DEBUG] 收到的交易请求详情:")
+                for trade in trades_received:
+                    print(f"  {trade.get('trade_id')}: {trade.get('from')} 想{trade.get('offer_type')} {trade.get('quantity')}x {trade.get('item')} for {trade.get('price')} gold")
+            
+            trades_sent = context.get('trades_sent', [])
+            if trades_sent:
+                print(f"[AI Agent DEBUG] 发送的交易请求详情:")
+                for trade in trades_sent:
+                    target = trade.get('target_id', 'unknown')
+                    offer_type = trade.get('offer_type', 'unknown')
+                    status = trade.get('status', 'pending')
+                    print(f"  {trade.get('trade_id')}: 发送给 {target} - {offer_type} {trade.get('quantity')}x {trade.get('item')} for {trade.get('price')} gold (状态: {status})")
             
             # 调用GPT API
             response = openai.ChatCompletion.create(
@@ -824,22 +964,26 @@ You must follow the ReAct (Reasoning + Acting) pattern:
 - `sell <item> <quantity>` - Sell to merchant (no action cost)  
 - `eat` - Eat bread to restore stamina (no action cost)
 - `produce` - Produce items (consumes action point + stamina)
-- `sleep` - Sleep to restore stamina (consumes action point, evening only, REQUIRES HOUSE!)
+- `sleep` - Sleep to restore stamina (consumes action point, evening only, REQUIRES HOUSE OR TEMP_ROOM!)
 - `idle` - Skip current segment (consumes action point)
 - `price` - Check merchant prices (no action cost)
 - `trades` - Check received trade requests (no action cost) - **READ ONLY**
 - `mytrades` - Check sent trade requests (no action cost) - **READ ONLY**
-- `trade <node_id> <buy/sell> <item> <quantity> <total_price>` - **SEND trade request to villager**
-- `send <target> <message>` - Send message to another villager
-- `accept <trade_id>` - Accept a trade request
-- `reject <trade_id>` - Reject a trade request
+- `trade <node_id> <buy/sell> <item> <quantity> <total_price>` - **SEND trade request to villager** 
+  **⚠️ IMPORTANT: Use node_id (like 'node1', 'node2') NOT villager names!**
+- `accept <trade_id>` - Accept received trade request (receiver only)
+- `reject <trade_id>` - Reject received trade request (receiver only)
+- `cancel <trade_id>` - Cancel your own trade request (initiator only)
+- `confirm <trade_id>` - Confirm trade (both parties must confirm to complete)
+- `send <node_id> <message>` - Send message to another villager
+  **⚠️ IMPORTANT: Use node_id (like 'node1', 'node2') NOT villager names!**
 
 ## Game Rules:
 - Each time segment allows ONE main action (produce/sleep/idle)
 - Trading and eating don't consume action points
 - Stamina: 0-100, work consumes stamina, sleep restores stamina
 - Hunger: -10 stamina daily, -20 extra if no sleep at night
-- **CRITICAL: Sleep requires a HOUSE! You cannot sleep without a house.**
+- **CRITICAL: Sleep requires a HOUSE or TEMP_ROOM! Temp room costs 15 gold (affordable!) and lasts 1 day.**
 - **IMPORTANT: Buy and produce are SEPARATE decisions! Buy resources first, then produce in the next decision.**
 - **ACTION SUBMISSION STATUS: If you have already submitted your action for this time segment, you can still:**
   - Respond to trade requests (accept/reject)
@@ -850,31 +994,105 @@ You must follow the ReAct (Reasoning + Acting) pattern:
   - **BUT CANNOT: produce, sleep, buy, sell, or idle (these consume action points)**
   - **IMPORTANT: Trading is ALWAYS allowed, even after submitting actions!**
 
-## P2P Trading Strategy (HIGHEST PRIORITY):
-- **Selling**: Always try to sell products to villagers at better prices than merchant buy prices
-- **Buying**: Always try to buy materials from villagers at better prices than merchant sell prices
-- **Smart Pricing**: Use prices between merchant buy/sell prices for maximum profit
-- **Targeting**: Use villager occupation and inventory to identify trade partners
-- **Status Check**: Before trading, check if target villager can trade (not waiting/submitted action)
+## Priority Order (CRITICAL - Follow This Order):
+1. **SURVIVAL**: 
+   - Eat if stamina ≤ 35
+   - ⚠️ **EVENING/NIGHT WITHOUT HOUSE**: Buy temp_room (15 gold) BEFORE sleeping!
+   - Sleep if night and stamina ≤ 45 (requires house/temp_room)
+
+2. **CONFIRM TRADES**: ⚠️ Check `mytrades` and `trades` for status="accepted" → USE `confirm <trade_id>`!
+
+3. **CHECK PRICES** (if not checked recently):
+   - Look at PREVIOUS OBSERVATIONS first
+   - If last 2-3 decisions include "PRICE" action → prices already known, can skip
+   - Recommended to check once before making economic decisions
+   - Prices are stable within the same day
+
+4. **ACQUIRE RESOURCES**: Buy materials from merchant if needed
+   - Recommended to check prices first (Step 3) for informed decisions
+   - Knowing prices helps optimize spending
+
+5. **PRODUCTION**: Produce items if you have materials and stamina ≥ 20
+
+6. **TRADING**: 
+   - First: Handle received trade requests (accept/reject)
+   - Then: Send P2P trade requests (recommended to use prices from step 3)
+   - Format: `trade <node_id> <buy/sell> <item> <quantity> <price>`
+   - Knowing current prices helps make fair offers
+
+7. **COMMUNICATION**: For non-trade coordination when needed
+
+8. **IDLE**: When no productive action is currently possible
+
+💡 **Smart Strategy**: Check prices early in your decision cycle
+- Helps you make informed buy/sell/trade decisions
+- Allows you to compare merchant vs P2P options
+- One price check can inform multiple subsequent decisions
+
+## P2P Trading Strategy (HIGH PRIORITY):
+- **Selling**: Try to sell products to villagers at better prices than merchant buy prices
+- **Buying**: Try to buy materials from villagers at better prices than merchant sell prices
+- **Smart Pricing**: Use prices between merchant buy/sell prices (e.g., merchant buys at 5, sells at 10 → use 7)
+- **Targeting**: Farmers have wheat/seeds, Chefs have bread, Builders have wood
 - **No Spam**: Don't send duplicate trade requests to the same villager
-- **Negotiation First**: Always send a negotiation message before sending trade request
-- **CRITICAL**: After negotiation, ALWAYS send the actual trade request using `trade` command
-- **IMPORTANT**: `trades` command only shows received requests - use `trade` command to SEND requests
-- **Fallback**: If P2P trading fails, fall back to merchant trading
-- **Examples**:
-  - Farmer: `send node2 "Hi! I have 3x wheat to sell for 21 gold total (7 gold each). This is better than the merchant's buy price of 5 gold each. Would you like to buy?"`
-  - Chef: `send node1 "Hi! I'd like to buy 3x wheat from you for 21 gold total (7 gold each). This is better than the merchant's price of 10 gold each. Are you interested?"`
-  - After negotiation: `trade node2 sell wheat 3 21` or `trade node1 buy wheat 3 21`
+- **⚠️ DIRECT TRADING**: Send `trade` command DIRECTLY, NO negotiation messages!
+- **Commands**: `trades`=view received, `mytrades`=view sent, `trade`=send new request
+- **Fallback**: If no response after 2-3 decisions, trade with merchant instead
+- **Examples (DO THIS - USE NODE_ID)**:
+  - Farmer (node1) selling to Chef (node2): `trade node2 sell wheat 5 35` (5 wheat at 7 gold each)
+  - Chef (node2) buying from Farmer (node1): `trade node1 buy wheat 3 21` (3 wheat at 7 gold each)
 
-## Trading Workflow:
-1. **Negotiation Phase**: Send message to discuss price and terms
-2. **Action Phase**: Send actual trade request using `trade` command
-3. **Response Phase**: Use `accept` or `reject` for received requests
-4. **Confirmation Phase**: Use `confirm` to complete accepted trades
+## Trading Workflow (Centralized System via Merchant):
+1. **Initiate Phase**: Use `trade` command to create trade request (status: pending)
+2. **Accept/Reject Phase**: Receiver uses `accept` or `reject` on the trade
+   - After `accept`: status changes to "accepted"
+3. **Confirm Phase**: ⚠️ BOTH parties must `confirm` to complete the trade!
+   - Check `mytrades` or `trades` to see if status is "accepted"
+   - If status is "accepted", use `confirm <trade_id>` to finalize
+   - Trade completes only when BOTH parties confirm
+4. **Cancel Phase**: Initiator can use `cancel` before receiver accepts
 
-**CRITICAL**: Don't just negotiate - always follow up with actual trade requests!
-**REMEMBER**: `trades` shows what you received, `trade` sends what you want to offer!
-**IMPORTANT**: When you see trade requests in `trades`, decide whether to accept or reject them!
+**TRADE FLOW EXAMPLE** (⚠️ USE NODE_ID, NOT NAME):
+- Alice (node1): `trade node2 buy wheat 3 21` → Creates trade_1
+- Bob (node2): `trades` → Sees trade_1 from Alice
+- Bob: `accept trade_1` → Accepts the trade (resources checked)
+- Bob: `confirm trade_1` → Bob confirms
+- Alice: `confirm trade_1` → Alice confirms → Trade completes automatically!
+
+**CRITICAL POINTS**:
+- **INVENTORY CHECK**: System checks resources when accepting trade
+- **ATOMIC COMPLETION**: Trade completes when BOTH parties confirm
+- **UNIQUE IDs**: All trades have unique IDs managed by Merchant
+- **STATUS TRACKING**: Use `trades` and `mytrades` to monitor trade status
+- **TRADE ID CLARITY**: `trades` shows requests YOU received, `mytrades` shows requests YOU sent
+- **REJECT vs CANCEL**: Receiver uses `reject`, initiator uses `cancel`
+- **PRICE NEGOTIATION**: 
+  * If you RECEIVE a trade with bad price → `reject <trade_id>` + optionally send message with counter-offer
+  * If your SENT trade is rejected → check `mytrades` status, then send new trade with adjusted price
+  * Don't negotiate before sending first trade - let the trade request itself be the first offer!
+- **PRODUCTIVITY FOCUS**: Don't get stuck negotiating - move to actual trades quickly!
+- **NO SPAM**: Don't send duplicate trade requests to the same villager
+
+## Trading Decision Process (Recommended Flow):
+1. **Check prices when needed** (but avoid repeating):
+   - Check PREVIOUS OBSERVATIONS: If you see "PRICE" action recently → prices already known
+   - Use `price` command if you haven't checked recently (within last 2-3 decisions)
+   - Once you know prices, you can use them for multiple decisions
+   - Example: If merchant sells wheat at 10g, you can offer 7-8g for P2P buy
+
+2. **Direct trade requests work well**: Skip lengthy negotiations
+   - Less effective: send node2 "Hi, interested in wheat?" then wait for reply
+   - More effective: After knowing prices, directly send: `trade node2 buy wheat 3 21`
+   - Trade request itself serves as your offer
+
+3. **Smart pricing strategy**: Base your P2P prices on merchant prices
+   - For buying: Offer slightly more than merchant's buy price (e.g., 7g if merchant buys at 5g)
+   - For selling: Ask slightly less than merchant's sell price (e.g., 9g if merchant sells at 10g)
+   - Win-win pricing encourages trades!
+
+4. **Use node_id for trades**: Look at "Online Villagers" list to find node_id (e.g., node1, node2)
+
+5. **Avoid spam**: Don't send duplicate messages or trade requests
 
 ## Output Format:
 Always follow this exact format:
@@ -957,17 +1175,26 @@ You operate autonomously, following the game's rules, using REST/CLI actions to 
    * If stamina ≤ 35 → `eat` (if bread available).
    * If it's Night and stamina ≤ 45 → `sleep` (if housing available).
 
-2. **P2P Trading logic (highest priority for profit):**
-   * **Selling**: If you have products, try to sell to villagers at better prices than merchant.
-   * **Buying**: If you need materials, try to buy from villagers at better prices than merchant.
-   * **Targeting**: Use villager occupation and inventory to identify potential trade partners.
-
-3. **Production logic:**
-   * If stamina and materials are sufficient → `produce`.
+2. **Production logic (HIGH PRIORITY):**
+   * If stamina ≥ 20 and materials are sufficient → `produce`.
    * If missing inputs → `buy` from merchant (only if no P2P options).
    * If unproductive → `idle`.
 
-4. **Night strategy:**
+3. **P2P Trading logic (HIGH PRIORITY for profit):**
+   * **Selling**: If you have products, try to sell to villagers at better prices than merchant.
+   * **Buying**: If you need materials, try to buy from villagers at better prices than merchant.
+   * **Targeting**: Use villager occupation and inventory to identify potential trade partners.
+   * **MANDATORY NEGOTIATION**: ALWAYS send a negotiation message BEFORE sending trade request.
+   * **EFFICIENT TRADING**: After negotiation, send the trade request when appropriate.
+   * **Efficient Communication**: Send ONE negotiation message, then trade request - don't chat endlessly.
+
+4. **Communication strategy (LOW PRIORITY):**
+   * Send messages ONLY when necessary for trading coordination
+   * Don't send multiple messages in a row - focus on productive actions
+   * After negotiation, send trade request when ready, optionally inform the other party
+   * **PRODUCTIVITY FOCUS**: Remember your main goal is to produce items and make profit. Don't get distracted by endless negotiations!
+
+5. **Night strategy:**
    * Prefer sleeping to recover stamina; avoid overwork unless safe.
 
 ---
@@ -1076,16 +1303,26 @@ Sleep Status: {"Already slept today" if has_slept else "Not slept yet" + (" - Sh
 
 Inventory: {items if items else "Empty"}
 
-Merchant Prices: {prices.get('prices', {}) if prices.get('prices') else "Use 'price' command to check"}
+Merchant Prices: 
+{("  Buy: seed=" + str(prices.get('buy', {}).get('seed', '?')) + ", wheat=" + str(prices.get('buy', {}).get('wheat', '?')) + ", bread=" + str(prices.get('buy', {}).get('bread', '?')) + chr(10) + "  Sell: seed=" + str(prices.get('sell', {}).get('seed', '?')) + ", wheat=" + str(prices.get('sell', {}).get('wheat', '?')) + ", bread=" + str(prices.get('sell', {}).get('bread', '?'))) if prices.get('buy') or prices.get('sell') else "Unknown - Use 'price' command to check"}
 
 Messages: {len(messages)} received
 {chr(10).join([f"- From {msg.get('from', 'Unknown')}: {msg.get('content', '')[:50]}..." for msg in messages[:3]]) if messages else "No messages"}
 
-Trades: {len(trades_received)} received, {len(trades_sent)} sent
-{chr(10).join([f"- Trade {trade.get('trade_id', '')}: {trade.get('from', 'Unknown')} wants to {trade.get('offer_type', '')} {trade.get('item', '')} x{trade.get('quantity', 0)} for {trade.get('price', 0)} gold total ({trade.get('price', 0)//trade.get('quantity', 1)} gold each)" for trade in trades_received[:3]]) if trades_received else "No trade requests"}
+Received Trades: {len(trades_received)} requests
+{chr(10).join([f"- {trade.get('trade_id', '')}: {trade.get('initiator_id', 'Unknown')} wants to {trade.get('offer_type', '')} {trade.get('quantity', 0)}x {trade.get('item', '')} @ {trade.get('price', 0)} gold total (status: {trade.get('status', 'pending')})" for trade in trades_received[:3]]) if trades_received else "No received trade requests"}
+
+Sent Trades: {len(trades_sent)} requests
+{chr(10).join([f"- {trade.get('trade_id', '')}: to {trade.get('target_id', 'Unknown')}, {trade.get('offer_type', '')} {trade.get('quantity', 0)}x {trade.get('item', '')} @ {trade.get('price', 0)} gold (status: {trade.get('status', 'pending')})" for trade in trades_sent[:3]]) if trades_sent else "No sent trade requests"}
+
+⚠️ Trade Status Guide:
+- pending = Waiting for other party to accept/reject
+- accepted = Other party accepted! Now BOTH must confirm to complete
+- rejected = Other party rejected, consider adjusting price
+- completed = Trade finished, resources transferred
 
 Online Villagers: {len(villagers)}
-{chr(10).join([f"- {v['name']} ({v['occupation']}) - Action: {'✓ Submitted' if v.get('has_submitted_action', False) else '⏳ Pending'}" for v in villagers])}
+{chr(10).join([f"- {v['node_id']}: {v['name']} ({v['occupation']}) - Action: {'✓ Submitted' if v.get('has_submitted_action', False) else '⏳ Pending'}" for v in villagers])}
 
 === ACTION SUBMISSION STATUS ===
 Total Villagers: {len(villagers)}
@@ -1096,7 +1333,9 @@ Waiting: {[v['name'] for v in villagers if not v.get('has_submitted_action', Fal
 {self._get_recent_observations()}
 
 === IMPORTANT GAME RULES ===
-- Sleep requires a HOUSE! You cannot sleep without a house.
+- Sleep requires a HOUSE or TEMP_ROOM!
+  * TEMP_ROOM: Buy from merchant for 15 gold (affordable!), lasts 1 day, perfect for early game
+  * HOUSE: Permanent, expensive (260 gold merchant / trade with carpenter), but one-time cost
 - To get a house: Carpenter produces houses (10 wood → 1 house), or trade with other villagers
 - Farmer: 1 seed → 5 wheat (costs 20 stamina)
 - Chef: 3 wheat → 2 bread (costs 15 stamina) 
@@ -1109,45 +1348,152 @@ Now follow the ReAct pattern:"""
         return prompt
 
     def _get_recent_observations(self) -> str:
-        """获取最近的观察结果"""
+        """获取最近的观察结果（增强版：显示更多上下文）"""
         if not self.decision_history:
             return "No previous observations."
         
-        recent = self.decision_history[-3:]  # 最近3次决策
+        recent = self.decision_history[-5:]  # 增加到最近5次决策
         observations = []
         
         for entry in recent:
             timestamp = entry['timestamp'][:19]  # 去掉毫秒
             decision = entry['decision']
             action = decision.get('action', 'unknown')
-            reason = decision.get('reason', 'No reason')
+            command = decision.get('command', '')
+            reason = decision.get('reason', 'No reason')[:80]  # 限制理由长度
             success = decision.get('success', True)
             error_msg = decision.get('error_message', '')
             
             if success:
-                observations.append(f"[{timestamp}] ACTION: {action} - SUCCESS - {reason}")
-                # 如果是价格查询，显示价格信息
-                if action == "price" and 'prices' in decision:
-                    prices = decision.get('prices', {})
-                    if prices:
-                        observations.append(f"  PRICES: {prices}")
-                # 如果是交易查询，显示交易信息
+                # 显示动作和命令
+                action_display = f"[{timestamp}] {action.upper()}"
+                if command:
+                    action_display += f": {command}"
+                observations.append(action_display)
+                
+                # 根据不同动作显示不同信息
+                if action == "send":
+                    # 显示发送的消息
+                    target = decision.get('target', 'unknown')
+                    content = decision.get('content', '')[:100]
+                    observations.append(f"  → Sent to {target}: \"{content}\"")
+                elif action == "trade":
+                    # 显示发起的交易
+                    target = decision.get('target', 'unknown')
+                    trade_action = decision.get('trade_action', 'unknown')
+                    item = decision.get('item', 'unknown')
+                    quantity = decision.get('quantity', 0)
+                    price = decision.get('price', 0)
+                    observations.append(f"  → Trade request: {trade_action} {quantity}x {item} @ {price} gold to {target}")
+                elif action == "price":
+                    # 显示查询的价格
+                    if 'prices' in decision:
+                        prices = decision.get('prices', {})
+                        buy_prices = prices.get('buy', {})
+                        if buy_prices:
+                            observations.append(f"  → Prices: seed={buy_prices.get('seed', '?')}, wheat={buy_prices.get('wheat', '?')}, bread={buy_prices.get('bread', '?')}")
+                    else:
+                        observations.append(f"  → Checked prices")
                 elif action == "trades" and 'trades' in decision:
                     trades = decision.get('trades', [])
-                    if trades:
-                        observations.append(f"  RECEIVED TRADES: {len(trades)} requests")
-                        for trade in trades[:2]:  # 显示前2个交易
-                            observations.append(f"    - {trade.get('action', '')} {trade.get('item', '')} x{trade.get('quantity', 0)} for {trade.get('price', 0)} gold")
+                    observations.append(f"  → {len(trades)} received trade requests")
                 elif action == "mytrades" and 'mytrades' in decision:
                     trades = decision.get('mytrades', [])
-                    if trades:
-                        observations.append(f"  SENT TRADES: {len(trades)} requests")
-                        for trade in trades[:2]:  # 显示前2个交易
-                            observations.append(f"    - {trade.get('action', '')} {trade.get('item', '')} x{trade.get('quantity', 0)} for {trade.get('price', 0)} gold")
+                    observations.append(f"  → {len(trades)} sent trade requests")
+                elif action == "accept":
+                    trade_id = decision.get('trade_id', 'unknown')
+                    observations.append(f"  → Accepted {trade_id}")
+                elif action == "confirm":
+                    trade_id = decision.get('trade_id', 'unknown')
+                    observations.append(f"  → Confirmed {trade_id}")
+                elif action == "reject":
+                    trade_id = decision.get('trade_id', 'unknown')
+                    observations.append(f"  → Rejected {trade_id}")
+                elif action in ["produce", "sleep", "idle", "buy", "sell", "eat"]:
+                    observations.append(f"  → {action} completed")
             else:
-                observations.append(f"[{timestamp}] ACTION: {action} - FAILED - {reason}")
+                observations.append(f"[{timestamp}] {action.upper()} - FAILED")
                 if error_msg:
-                    observations.append(f"  ERROR: {error_msg}")
+                    observations.append(f"  → Error: {error_msg[:100]}")
+        
+        # === REFLEXION: 自动检测问题模式并生成反思 ===
+        reflexions = []
+        
+        if len(recent) >= 3:
+            last_3_actions = [entry['decision'].get('action') for entry in recent[-3:]]
+            last_3_commands = [entry['decision'].get('command', '') for entry in recent[-3:]]
+            
+            # 模式1: 连续发送消息但没有交易
+            send_count = last_3_actions.count('send')
+            trade_count = last_3_actions.count('trade')
+            if send_count >= 2 and trade_count == 0:
+                reflexions.append("🔴 PATTERN DETECTED: Multiple messages sent but NO trade request!")
+                reflexions.append("   → REFLEXION: You're stuck in negotiation. Stop talking and SEND THE TRADE!")
+                reflexions.append("   → SUGGESTED ACTION: trade <node_id> <buy/sell> <item> <quantity> <price>")
+            
+            # 模式1b: 连续查询信息（price/trades/mytrades）但不行动
+            info_actions = ['price', 'trades', 'mytrades']
+            info_count = sum(1 for a in last_3_actions if a in info_actions)
+            action_count = sum(1 for a in last_3_actions if a in ['produce', 'buy', 'sell', 'trade', 'sleep', 'eat'])
+            if info_count >= 2 and action_count == 0:
+                reflexions.append("🔴 PATTERN DETECTED: Checking info repeatedly but NO action taken!")
+                reflexions.append("   → REFLEXION: You already know the information. Stop checking and ACT!")
+                last_action = last_3_actions[-1]
+                if last_action == 'price':
+                    reflexions.append("   → SUGGESTED ACTION: Buy seeds/wheat/etc, or produce")
+                elif last_action in ['trades', 'mytrades']:
+                    reflexions.append("   → SUGGESTED ACTION: Accept/confirm trades, or send new trade request")
+            
+            # 模式1c: 发起交易但没有先查询价格
+            # 检查最近5次决策中是否有trade但之前没有price
+            if len(self.decision_history) >= 2:
+                last_5 = self.decision_history[-5:]
+                for i, entry in enumerate(last_5):
+                    if entry['decision'].get('action') == 'trade':
+                        # 检查这次trade之前是否查询过价格
+                        has_price_before = False
+                        for j in range(max(0, i-2), i):  # 检查前2次决策
+                            if last_5[j]['decision'].get('action') == 'price':
+                                has_price_before = True
+                                break
+                        
+                        if not has_price_before and i == len(last_5) - 1:  # 如果是最近一次且没查价格
+                            reflexions.append("🟡 PATTERN DETECTED: Sent trade WITHOUT checking prices first!")
+                            reflexions.append("   → REFLEXION: Always check 'price' before P2P trading!")
+                            reflexions.append("   → REASON: Merchant prices fluctuate daily (±10%), need current data for fair offers")
+                            break
+            
+            # 模式2: 重复相同或相似的命令
+            if len(set(last_3_commands)) <= 2 and len(last_3_commands) == 3:
+                reflexions.append("🔴 PATTERN DETECTED: Repeating similar actions!")
+                reflexions.append("   → REFLEXION: Doing the same thing won't change the result.")
+                reflexions.append("   → SUGGESTED ACTION: Try a different approach or move on.")
+            
+            # 模式3: 连续失败
+            failed_count = sum(1 for entry in recent[-3:] if not entry['decision'].get('success', True))
+            if failed_count >= 2:
+                reflexions.append("🔴 PATTERN DETECTED: Multiple failures!")
+                reflexions.append("   → REFLEXION: Something is wrong with your approach.")
+                last_errors = [entry['decision'].get('error_message', '') for entry in recent[-3:] 
+                              if not entry['decision'].get('success', True)]
+                if last_errors:
+                    reflexions.append(f"   → ERRORS: {'; '.join(filter(None, last_errors))[:150]}")
+                reflexions.append("   → SUGGESTED ACTION: Check requirements or try merchant instead.")
+        
+        # 模式4: 长时间无trade进展
+        if len(recent) >= 5:
+            last_5_actions = [entry['decision'].get('action') for entry in recent[-5:]]
+            if 'trade' not in last_5_actions and last_5_actions.count('send') >= 2:
+                reflexions.append("🟡 OBSERVATION: 5 decisions but no actual trade sent yet!")
+                reflexions.append("   → REFLEXION: Negotiations are taking too long.")
+                reflexions.append("   → SUGGESTED ACTION: Either send trade NOW or trade with merchant.")
+        
+        # 将reflexion添加到observations
+        if reflexions:
+            observations.append("\n" + "="*60)
+            observations.append("🧠 SELF-REFLEXION (Analyze your recent behavior):")
+            observations.append("="*60)
+            observations.extend(reflexions)
         
         return "\n".join(observations)
 
@@ -1319,7 +1665,7 @@ Make smart decisions based on the above information:
    - **Carpenter**: Sell houses to everyone, buy wood from other carpenters
    - **Smart trading**: Offer competitive prices (slightly below merchant prices)
    - **Check trades**: Use 'trades' to see incoming requests, 'mytrades' for sent requests
-   - **Respond to trades**: Use 'accept <trade_id>' or 'reject <trade_id>'
+   - **Respond to trades**: Use 'prepare <trade_id>' or 'abort <trade_id>'
    - **Complete trades**: Use 'confirm <trade_id>' after other party accepts
 
 5. TIME MANAGEMENT:
@@ -1331,7 +1677,7 @@ Make smart decisions based on the above information:
    - "trade node2 sell wheat 5 80" → Sell 5 wheat to node2 for 80 gold total
    - "trade node1 buy seed 2 15" → Buy 2 seeds from node1 for 15 gold total
    - "trades" → Check incoming trade requests
-   - "accept trade_0" → Accept a trade request
+   - "prepare trade_0" → Prepare a trade request
    - "confirm trade_0" → Complete a trade after acceptance
    
    IMPORTANT: Use node IDs (node1, node2, etc.) not names for trading!
@@ -1417,8 +1763,41 @@ Return JSON decision format."""
                                 "reason": reason,
                                 "command": action_line
                             }
+                        elif action == "prepare" and len(parts) >= 2:
+                            # 格式: prepare trade_1 或 prepare 1
+                            trade_id = parts[1]
+                            if not trade_id.startswith('trade_'):
+                                trade_id = f"trade_{trade_id}"
+                            return {
+                                "action": "prepare",
+                                "reason": reason,
+                                "command": action_line,
+                                "trade_id": trade_id
+                            }
+                        elif action == "commit" and len(parts) >= 2:
+                            # 格式: commit trade_1 或 commit 1
+                            trade_id = parts[1]
+                            if not trade_id.startswith('trade_'):
+                                trade_id = f"trade_{trade_id}"
+                            return {
+                                "action": "commit",
+                                "reason": reason,
+                                "command": action_line,
+                                "trade_id": trade_id
+                            }
+                        elif action == "abort" and len(parts) >= 2:
+                            # 格式: abort trade_1 或 abort 1
+                            trade_id = parts[1]
+                            if not trade_id.startswith('trade_'):
+                                trade_id = f"trade_{trade_id}"
+                            return {
+                                "action": "abort",
+                                "reason": reason,
+                                "command": action_line,
+                                "trade_id": trade_id
+                            }
                         elif action == "accept" and len(parts) >= 2:
-                            # 格式: accept trade_1 或 accept 1
+                            # 格式: accept trade_1
                             trade_id = parts[1]
                             if not trade_id.startswith('trade_'):
                                 trade_id = f"trade_{trade_id}"
@@ -1429,12 +1808,34 @@ Return JSON decision format."""
                                 "trade_id": trade_id
                             }
                         elif action == "reject" and len(parts) >= 2:
-                            # 格式: reject trade_1 或 reject 1
+                            # 格式: reject trade_1
                             trade_id = parts[1]
                             if not trade_id.startswith('trade_'):
                                 trade_id = f"trade_{trade_id}"
                             return {
                                 "action": "reject",
+                                "reason": reason,
+                                "command": action_line,
+                                "trade_id": trade_id
+                            }
+                        elif action == "cancel" and len(parts) >= 2:
+                            # 格式: cancel trade_1
+                            trade_id = parts[1]
+                            if not trade_id.startswith('trade_'):
+                                trade_id = f"trade_{trade_id}"
+                            return {
+                                "action": "cancel",
+                                "reason": reason,
+                                "command": action_line,
+                                "trade_id": trade_id
+                            }
+                        elif action == "confirm" and len(parts) >= 2:
+                            # 格式: confirm trade_1
+                            trade_id = parts[1]
+                            if not trade_id.startswith('trade_'):
+                                trade_id = f"trade_{trade_id}"
+                            return {
+                                "action": "confirm",
                                 "reason": reason,
                                 "command": action_line,
                                 "trade_id": trade_id
@@ -1601,11 +2002,57 @@ Return JSON decision format."""
                     print(f"[AI Agent] {self.villager_name} 发现 {len(trades_received)} 个待处理的交易请求")
                     self._handle_pending_trades(trades_received, context)
                 
+                # 检查是否有需要确认的已发送交易
+                trades_sent = context.get('trades_sent', [])
+                if trades_sent:
+                    print(f"[AI Agent] {self.villager_name} 检查 {len(trades_sent)} 个已发送的交易")
+                    self._handle_sent_trades_confirmation(trades_sent, context)
+                
                 # 检查是否有新消息
                 messages = context.get('messages', [])
                 unread_messages = [msg for msg in messages if not msg.get('read', False)]
                 if unread_messages:
                     print(f"[AI Agent] {self.villager_name} 发现 {len(unread_messages)} 条未读消息")
+                    # 检查是否有交易完成消息
+                    for msg in unread_messages:
+                        content = msg.get('content', '')
+                        if '交易' in content and '已完成' in content:
+                            print(f"[AI Agent] {self.villager_name} 收到交易完成消息，刷新状态...")
+                            # 从消息中提取交易ID
+                            import re
+                            trade_id_match = re.search(r'trade_\d+', content)
+                            if trade_id_match:
+                                trade_id = trade_id_match.group()
+                                print(f"[AI Agent] {self.villager_name} 清理交易 {trade_id}")
+                                
+                                # 清理sent_trades中的已完成交易
+                                try:
+                                    # 获取当前sent_trades
+                                    result = self.execute_action("mytrades")
+                                    if isinstance(result, tuple):
+                                        success, data = result
+                                    else:
+                                        success = result
+                                        data = None
+                                    
+                                    if success and data:
+                                        trades = data.get('trades', [])
+                                        for trade in trades:
+                                            if trade.get('trade_id') == trade_id:
+                                                # 标记为已完成
+                                                trade['status'] = 'completed'
+                                                print(f"[AI Agent] ✓ {self.villager_name} 已标记交易 {trade_id} 为完成")
+                                                break
+                                except Exception as e:
+                                    print(f"[AI Agent] ✗ {self.villager_name} 更新交易状态异常: {e}")
+                            
+                            # 刷新村民状态以获取最新信息
+                            try:
+                                print(f"[AI Agent] {self.villager_name} 刷新状态以获取最新交易结果...")
+                                # 这里可以添加状态刷新逻辑
+                            except Exception as e:
+                                print(f"[AI Agent] ✗ {self.villager_name} 刷新状态异常: {e}")
+                    
                     # 标记消息为已读
                     for msg in unread_messages:
                         try:
@@ -1685,18 +2132,28 @@ Return JSON decision format."""
             if trade_id:
                 success = self.execute_action("accept_trade", trade_id=trade_id)
             else:
+                success = False
                 error_message = "Accept trade failed: No trade ID provided"
         elif action == "reject":
             trade_id = decision.get('trade_id')
             if trade_id:
                 success = self.execute_action("reject_trade", trade_id=trade_id)
             else:
+                success = False
                 error_message = "Reject trade failed: No trade ID provided"
+        elif action == "cancel":
+            trade_id = decision.get('trade_id')
+            if trade_id:
+                success = self.execute_action("cancel_trade", trade_id=trade_id)
+            else:
+                success = False
+                error_message = "Cancel trade failed: No trade ID provided"
         elif action == "confirm":
             trade_id = decision.get('trade_id')
             if trade_id:
                 success = self.execute_action("confirm_trade", trade_id=trade_id)
             else:
+                success = False
                 error_message = "Confirm trade failed: No trade ID provided"
         else:
             print(f"[AI Agent] ✗ 未知行动: {action}")

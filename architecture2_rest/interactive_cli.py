@@ -6,6 +6,7 @@
 import requests
 import sys
 import json
+import time
 from typing import Optional
 
 
@@ -270,7 +271,7 @@ class VillagerCLI:
             return {}
     
     def trade_with_villager(self, target_node: str, item: str, quantity: int, price: int, offer_type: str):
-        """与其他村民交易（点对点）"""
+        """与其他村民交易（通过Merchant中心化管理）"""
         try:
             # 获取当前村民信息（包含node_id）
             my_info = self.get_villager_info()
@@ -307,21 +308,20 @@ class VillagerCLI:
                 print("   例如: trade node1 buy wheat 10 100")
                 return
             
-            # 获取当前村民名称（my_info已在前面获取）
-            my_name = my_info['name']
-            
-            # 发送交易请求
-            print(f"\n📤 向 {target_node} 发送交易请求...")
+            # 通过Merchant创建交易
+            print(f"\n📤 创建交易请求（通过商人节点）...")
             
             response = requests.post(
-                f"http://{target_address}/trade/request",
+                f"{self.merchant_url}/trade/create",
                 json={
-                    'from': my_name,
-                    'from_address': f'localhost:{self.villager_port}',
+                    'initiator_id': my_node_id,
+                    'initiator_address': f'localhost:{self.villager_port}',
+                    'target_id': target_id,
+                    'target_address': target_address,
+                    'offer_type': offer_type,
                     'item': item,
                     'quantity': quantity,
-                    'price': price,
-                    'offer_type': offer_type
+                    'price': price
                 },
                 timeout=5
             )
@@ -331,32 +331,30 @@ class VillagerCLI:
                 trade_id = data['trade_id']
                 
                 if offer_type == 'buy':
-                    print(f"✓ 交易请求已发送")
+                    print(f"✓ 交易请求已创建: {trade_id}")
                     print(f"  你想从 {target_node} 购买 {quantity}x {item}, 出价 {price}金币")
                 else:
-                    print(f"✓ 交易请求已发送")
+                    print(f"✓ 交易请求已创建: {trade_id}")
                     print(f"  你想向 {target_node} 出售 {quantity}x {item}, 要价 {price}金币")
                 
                 print(f"\n⏳ 等待 {target_node} 接受或拒绝...")
-                print(f"💡 提示: 对方需要在CLI中输入 'accept' 或 'reject' 命令")
+                print(f"💡 提示: 对方需要输入 'accept {trade_id}' 和 'confirm {trade_id}'")
                 print(f"   使用 'mytrades' 查看此交易的状态")
-                
-                # 保存交易信息到字典中
-                self.pending_trades[trade_id] = {
-                    'target': target_id,
-                    'target_address': target_address,
-                    'item': item,
-                    'quantity': quantity,
-                    'price': price,
-                    'type': offer_type,
-                    'trade_id': trade_id,
-                    'status': 'pending'  # 标记状态
-                }
             else:
-                print(f"\n✗ 发送交易请求失败")
+                print(f"\n✗ 创建交易请求失败: HTTP {response.status_code}")
         
         except Exception as e:
             print(f"\n✗ 错误: {e}")
+    
+    def get_node_id(self):
+        """获取当前节点的node_id"""
+        try:
+            my_info = self.get_villager_info()
+            if my_info:
+                return my_info.get('node_id')
+            return None
+        except:
+            return None
     
     def check_my_pending_trade_status(self):
         """检查自己发起的交易状态"""
@@ -405,46 +403,77 @@ class VillagerCLI:
                 pass  # 静默失败
     
     def show_my_pending_trades(self):
-        """查看自己发起的待处理交易"""
-        if not self.pending_trades:
-            print("\n你没有发起任何待处理的交易")
-            return
-        
-        print("\n" + "="*60)
-        print("  你发起的交易请求")
-        print("="*60)
-        
-        for i, (trade_id, trade) in enumerate(self.pending_trades.items(), 1):
-            status = trade.get('status', 'pending')
-            print(f"\n[{i}] 交易ID: {trade_id}")
-            print(f"    对象: {trade['target']}")
-            
-            if trade['type'] == 'buy':
-                print(f"    类型: 你想购买")
-                print(f"    物品: {trade['quantity']}x {trade['item']}")
-                print(f"    出价: {trade['price']}金币")
-            else:
-                print(f"    类型: 你想出售")
-                print(f"    物品: {trade['quantity']}x {trade['item']}")
-                print(f"    要价: {trade['price']}金币")
-            
-            # 根据状态显示不同的提示
-            if status == 'ready_to_confirm':
-                print(f"    状态: ✓ 对方已接受")
-                print(f"    操作: confirm {trade_id} 完成交易")
-            else:
-                print(f"    状态: ⏳ 等待对方接受")
-                print(f"    操作: 等待对方响应或 cancel {trade_id} 取消")
-        
-        print("="*60)
-    
-    def check_pending_trades(self):
-        """查看收到的交易请求"""
+        """查看自己发起的交易（从Merchant查询）"""
         try:
-            response = requests.get(f"{self.villager_url}/trade/pending", timeout=5)
+            node_id = self.get_node_id()
+            if not node_id:
+                print("\n✗ 无法获取节点ID")
+                return
+            
+            response = requests.get(
+                f"{self.merchant_url}/trade/list",
+                params={'node_id': node_id, 'type': 'sent'},
+                timeout=5
+            )
+            
             if response.status_code == 200:
                 data = response.json()
-                trades = data.get('pending_trades', [])
+                trades = data.get('trades', [])
+                
+                if not trades:
+                    print("\n你没有发起任何待处理的交易")
+                    return
+                
+                print("\n" + "="*60)
+                print("  你发起的交易请求")
+                print("="*60)
+                
+                for i, trade in enumerate(trades, 1):
+                    status = trade.get('status', 'pending')
+                    print(f"\n[{i}] 交易ID: {trade['trade_id']}")
+                    print(f"    对象: {trade['target_id']}")
+                    
+                    if trade['offer_type'] == 'buy':
+                        print(f"    类型: 你想购买")
+                        print(f"    物品: {trade['quantity']}x {trade['item']}")
+                        print(f"    出价: {trade['price']}金币")
+                    else:
+                        print(f"    类型: 你想出售")
+                        print(f"    物品: {trade['quantity']}x {trade['item']}")
+                        print(f"    要价: {trade['price']}金币")
+                    
+                    # 根据状态显示不同的提示
+                    if status == 'accepted':
+                        print(f"    状态: ✓ 对方已接受（等待双方确认）")
+                        print(f"    操作: confirm {trade['trade_id']}")
+                    else:
+                        print(f"    状态: ⏳ 等待对方接受")
+                        print(f"    操作: 等待对方响应或 cancel {trade['trade_id']}")
+                
+                print("="*60)
+            else:
+                print("\n✗ 无法获取交易信息")
+        
+        except Exception as e:
+            print(f"\n✗ 错误: {e}")
+    
+    def check_pending_trades(self):
+        """查看收到的交易请求（从Merchant查询）"""
+        try:
+            node_id = self.get_node_id()
+            if not node_id:
+                print("\n✗ 无法获取节点ID")
+                return
+            
+            response = requests.get(
+                f"{self.merchant_url}/trade/list",
+                params={'node_id': node_id, 'type': 'pending'},
+                timeout=5
+            )
+            
+            if response.status_code == 200:
+                data = response.json()
+                trades = data.get('trades', [])
                 
                 if not trades:
                     print("\n没有收到待处理的交易请求")
@@ -457,7 +486,7 @@ class VillagerCLI:
                 for i, trade in enumerate(trades, 1):
                     status = trade.get('status', 'pending')
                     print(f"\n[{i}] 交易ID: {trade['trade_id']}")
-                    print(f"    来自: {trade['from']}")
+                    print(f"    来自: {trade['initiator_id']}")
                     
                     if trade['offer_type'] == 'buy':
                         print(f"    类型: 对方想购买")
@@ -470,8 +499,8 @@ class VillagerCLI:
                     
                     # 根据状态显示不同的提示
                     if status == 'accepted':
-                        print(f"    状态: ✓ 已接受（等待对方完成）")
-                        print(f"    操作: 等待对方confirm或reject {trade['trade_id']} 取消")
+                        print(f"    状态: ✓ 已接受（等待双方确认）")
+                        print(f"    操作: confirm {trade['trade_id']}")
                     else:
                         print(f"    状态: ⏳ 待处理")
                         print(f"    操作: accept {trade['trade_id']} 或 reject {trade['trade_id']}")
@@ -484,56 +513,198 @@ class VillagerCLI:
             print(f"\n✗ 错误: {e}")
     
     def accept_trade_request(self, trade_id: str):
-        """接受交易请求"""
+        """接受交易请求（通过Merchant）"""
         try:
-            # 先检查交易状态
-            trades_response = requests.get(f"{self.villager_url}/trade/pending", timeout=5)
-            if trades_response.status_code == 200:
-                trades = trades_response.json().get('pending_trades', [])
-                for trade in trades:
-                    if trade['trade_id'] == trade_id:
-                        if trade.get('status') == 'accepted':
-                            print(f"\n⚠️  交易 {trade_id} 已经被接受过了")
-                            print("   等待对方完成交易...")
-                            return
-                        break
+            node_id = self.get_node_id()
+            if not node_id:
+                print("\n✗ 无法获取节点ID")
+                return
             
             response = requests.post(
-                f"{self.villager_url}/trade/accept",
-                json={'trade_id': trade_id},
-                timeout=5
+                f"{self.merchant_url}/trade/accept",
+                json={'trade_id': trade_id, 'node_id': node_id},
+                timeout=10
             )
             
             if response.status_code == 200:
                 data = response.json()
-                trade = data.get('trade', {})
-                
-                print(f"\n✓ 交易已接受！")
-                print(f"  交易ID: {trade_id}")
-                print(f"  等待 {trade.get('from', '对方')} 完成交易...")
-                print("\n💡 对方会在他的终端看到提醒并执行 'confirm' 来完成交易")
+                if data.get('success'):
+                    print(f"\n✓ 交易已接受: {trade_id}")
+                    print(f"  等待双方确认...")
+                    print(f"  使用 'confirm {trade_id}' 确认交易")
+                else:
+                    print(f"\n✗ 接受交易失败: {data.get('message')}")
             else:
-                print(f"\n✗ 接受交易失败: {response.json().get('message', '未知错误')}")
+                print(f"\n✗ 接受交易失败: HTTP {response.status_code}")
+        
+        except Exception as e:
+            print(f"\n✗ 错误: {e}")
+    
+    def confirm_trade_request(self, trade_id: str):
+        """确认交易（通过Merchant）"""
+        try:
+            node_id = self.get_node_id()
+            if not node_id:
+                print("\n✗ 无法获取节点ID")
+                return
+            
+            response = requests.post(
+                f"{self.merchant_url}/trade/confirm",
+                json={'trade_id': trade_id, 'node_id': node_id},
+                timeout=10
+            )
+            
+            if response.status_code == 200:
+                data = response.json()
+                if data.get('success'):
+                    print(f"\n✓ 交易确认成功: {trade_id}")
+                    if 'completed successfully' in data.get('message', ''):
+                        print(f"  🎉 交易已完成！")
+                        # 获取最新的村民信息
+                        villager_info = self.get_villager_info()
+                        if villager_info:
+                            print(f"  当前状态:")
+                            print(f"    货币: {villager_info.get('inventory', {}).get('money', 0)}")
+                            print(f"    物品: {villager_info.get('inventory', {}).get('items', {})}")
+                    else:
+                        print(f"  等待对方确认...")
+                else:
+                    print(f"\n✗ 确认交易失败: {data.get('message')}")
+            else:
+                print(f"\n✗ 确认交易失败: HTTP {response.status_code}")
         
         except Exception as e:
             print(f"\n✗ 错误: {e}")
     
     def reject_trade_request(self, trade_id: str):
-        """拒绝交易请求"""
+        """拒绝交易请求（通过Merchant）"""
         try:
+            node_id = self.get_node_id()
+            if not node_id:
+                print("\n✗ 无法获取节点ID")
+                return
+            
             response = requests.post(
-                f"{self.villager_url}/trade/reject",
-                json={'trade_id': trade_id},
+                f"{self.merchant_url}/trade/reject",
+                json={'trade_id': trade_id, 'node_id': node_id},
                 timeout=5
             )
             
             if response.status_code == 200:
-                print(f"\n✓ 交易已拒绝: {trade_id}")
+                data = response.json()
+                if data.get('success'):
+                    print(f"\n✓ 交易已拒绝: {trade_id}")
+                else:
+                    print(f"\n✗ 拒绝交易失败: {data.get('message')}")
             else:
-                print(f"\n✗ 拒绝交易失败")
+                print(f"\n✗ 拒绝交易失败: HTTP {response.status_code}")
         
         except Exception as e:
             print(f"\n✗ 错误: {e}")
+    
+    def cancel_trade_request(self, trade_id: str):
+        """取消交易请求（通过Merchant）"""
+        try:
+            node_id = self.get_node_id()
+            if not node_id:
+                print("\n✗ 无法获取节点ID")
+                return
+            
+            response = requests.post(
+                f"{self.merchant_url}/trade/cancel",
+                json={'trade_id': trade_id, 'node_id': node_id},
+                timeout=5
+            )
+            
+            if response.status_code == 200:
+                data = response.json()
+                if data.get('success'):
+                    print(f"\n✓ 交易已取消: {trade_id}")
+                else:
+                    print(f"\n✗ 取消交易失败: {data.get('message')}")
+            else:
+                print(f"\n✗ 取消交易失败: HTTP {response.status_code}")
+        
+        except Exception as e:
+            print(f"\n✗ 错误: {e}")
+    
+    def prepare_trade_request(self, trade_id: str):
+        """准备交易（两阶段提交 - 阶段1）"""
+        try:
+            response = requests.post(
+                f"{self.villager_url}/trade/prepare",
+                json={'trade_id': trade_id},
+                timeout=10
+            )
+            
+            if response.status_code == 200:
+                data = response.json()
+                if data.get('success'):
+                    print(f"\n✓ 交易准备成功: {trade_id}")
+                    print(f"  等待对方提交交易...")
+                    return True
+                else:
+                    print(f"\n✗ 交易准备失败: {data.get('message')}")
+                    return False
+            else:
+                print(f"\n✗ 交易准备失败: HTTP {response.status_code}")
+                return False
+        except Exception as e:
+            print(f"\n✗ 交易准备异常: {e}")
+            return False
+
+    def commit_trade_request(self, trade_id: str):
+        """提交交易（两阶段提交 - 阶段2）"""
+        try:
+            response = requests.post(
+                f"{self.villager_url}/trade/commit",
+                json={'trade_id': trade_id},
+                timeout=10
+            )
+            
+            if response.status_code == 200:
+                data = response.json()
+                if data.get('success'):
+                    print(f"\n✓ 交易提交成功: {trade_id}")
+                    villager = data.get('villager', {})
+                    if villager:
+                        print(f"  当前状态:")
+                        print(f"    货币: {villager.get('inventory', {}).get('money', 0)}")
+                        print(f"    物品: {villager.get('inventory', {}).get('items', {})}")
+                    return True
+                else:
+                    print(f"\n✗ 交易提交失败: {data.get('message')}")
+                    return False
+            else:
+                print(f"\n✗ 交易提交失败: HTTP {response.status_code}")
+                return False
+        except Exception as e:
+            print(f"\n✗ 交易提交异常: {e}")
+            return False
+
+    def abort_trade_request(self, trade_id: str):
+        """中止交易（两阶段提交 - 回滚）"""
+        try:
+            response = requests.post(
+                f"{self.villager_url}/trade/abort",
+                json={'trade_id': trade_id},
+                timeout=10
+            )
+            
+            if response.status_code == 200:
+                data = response.json()
+                if data.get('success'):
+                    print(f"\n✓ 交易中止成功: {trade_id}")
+                    return True
+                else:
+                    print(f"\n✗ 交易中止失败: {data.get('message')}")
+                    return False
+            else:
+                print(f"\n✗ 交易中止失败: HTTP {response.status_code}")
+                return False
+        except Exception as e:
+            print(f"\n✗ 交易中止异常: {e}")
+            return False
     
     def complete_pending_trade(self, trade_id: str = None):
         """完成自己发起的交易（在对方accept后）"""
@@ -867,9 +1038,9 @@ class VillagerCLI:
         print("  trade <村民> sell <物品> <数量> <价格> - 向其他村民出售")
         print("  trades          - 查看收到的交易请求")
         print("  mytrades        - 查看自己发起的交易请求")
-        print("  accept <ID>     - 接受指定的交易请求")
+        print("  accept <ID>     - 接受指定的交易请求（锁定资源）")
         print("  reject <ID>     - 拒绝指定的交易请求")
-        print("  confirm <ID>    - 确认并完成自己发起的交易（指定ID）")
+        print("  confirm <ID>    - 确认交易（双方确认后完成）")
         print("  cancel <ID>     - 取消自己发起的交易（指定ID）")
         
         print("\n消息系统:")
@@ -887,8 +1058,8 @@ class VillagerCLI:
         print("\n  示例: trade bob buy wheat 10 100  → 向bob发起购买请求")
         print("        trades                       → 查看收到的请求")
         print("        mytrades                      → 查看自己发起的请求")
-        print("        accept trade_0               → 接受交易")
-        print("        confirm trade_0              → 发起方完成交易（指定ID）")
+        print("        accept trade_0               → 接受交易（锁定资源）")
+        print("        confirm trade_0              → 确认交易（双方确认）")
         
         print("\n时间同步系统:")
         print("  ⚠️  每个时段只能做一个主要行动（工作/睡眠/空闲）")
@@ -1075,6 +1246,21 @@ class VillagerCLI:
                 elif command == 'reject' and len(parts) >= 2:
                     trade_id = parts[1]
                     self.reject_trade_request(trade_id)
+                
+                # 取消交易请求
+                elif command == 'cancel' and len(parts) >= 2:
+                    trade_id = parts[1]
+                    self.cancel_trade_request(trade_id)
+                
+                # 确认交易（新系统：双方确认）
+                elif command == 'confirm' and len(parts) >= 2:
+                    trade_id = parts[1]
+                    self.confirm_trade_request(trade_id)
+                
+                # 中止交易（两阶段提交 - 回滚）
+                elif command == 'abort' and len(parts) >= 2:
+                    trade_id = parts[1]
+                    self.abort_trade_request(trade_id)
                 
                 # 确认自己发起的交易
                 elif command == 'confirm':
