@@ -827,9 +827,9 @@ You must follow the ReAct (Reasoning + Acting) pattern:
 - `sleep` - Sleep to restore stamina (consumes action point, evening only, REQUIRES HOUSE!)
 - `idle` - Skip current segment (consumes action point)
 - `price` - Check merchant prices (no action cost)
-- `trades` - Check received trade requests (no action cost)
-- `mytrades` - Check sent trade requests (no action cost)
-- `trade <node_id> <buy/sell> <item> <quantity> <total_price>` - Send trade request to villager
+- `trades` - Check received trade requests (no action cost) - **READ ONLY**
+- `mytrades` - Check sent trade requests (no action cost) - **READ ONLY**
+- `trade <node_id> <buy/sell> <item> <quantity> <total_price>` - **SEND trade request to villager**
 - `send <target> <message>` - Send message to another villager
 - `accept <trade_id>` - Accept a trade request
 - `reject <trade_id>` - Reject a trade request
@@ -859,16 +859,21 @@ You must follow the ReAct (Reasoning + Acting) pattern:
 - **No Spam**: Don't send duplicate trade requests to the same villager
 - **Negotiation First**: Always send a negotiation message before sending trade request
 - **CRITICAL**: After negotiation, ALWAYS send the actual trade request using `trade` command
+- **IMPORTANT**: `trades` command only shows received requests - use `trade` command to SEND requests
 - **Fallback**: If P2P trading fails, fall back to merchant trading
 - **Examples**:
   - Farmer: `send node2 "Hi! I have 3x wheat to sell for 21 gold total (7 gold each). This is better than the merchant's buy price of 5 gold each. Would you like to buy?"`
   - Chef: `send node1 "Hi! I'd like to buy 3x wheat from you for 21 gold total (7 gold each). This is better than the merchant's price of 10 gold each. Are you interested?"`
   - After negotiation: `trade node2 sell wheat 3 21` or `trade node1 buy wheat 3 21`
 
-## Occupation Recipes:
-- Farmer: 1 seed → 5 wheat (costs 20 stamina)
-- Chef: 3 wheat → 2 bread (costs 15 stamina)
-- Carpenter: 10 wood → 1 house (costs 30 stamina)
+## Trading Workflow:
+1. **Negotiation Phase**: Send message to discuss price and terms
+2. **Action Phase**: Send actual trade request using `trade` command
+3. **Response Phase**: Use `accept` or `reject` for received requests
+4. **Confirmation Phase**: Use `confirm` to complete accepted trades
+
+**CRITICAL**: Don't just negotiate - always follow up with actual trade requests!
+**REMEMBER**: `trades` shows what you received, `trade` sends what you want to offer!
 
 ## Output Format:
 Always follow this exact format:
