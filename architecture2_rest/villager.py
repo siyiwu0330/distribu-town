@@ -952,6 +952,38 @@ def mark_message_read():
         return jsonify({'success': False, 'error': str(e)}), 500
 
 
+@app.route('/mytrades', methods=['GET'])
+def get_my_trades():
+    """获取发送的交易请求"""
+    try:
+        # 返回发送的交易请求列表
+        sent_trades = villager_state.get('sent_trades', [])
+        return jsonify({
+            'success': True,
+            'trades': sent_trades
+        })
+    except Exception as e:
+        return jsonify({'success': False, 'error': str(e)}), 500
+
+
+@app.route('/sent_trades/add', methods=['POST'])
+def add_sent_trade():
+    """添加发送的交易记录"""
+    try:
+        data = request.json
+        
+        # 初始化 sent_trades 列表
+        if 'sent_trades' not in villager_state:
+            villager_state['sent_trades'] = []
+        
+        # 添加交易记录
+        villager_state['sent_trades'].append(data)
+        
+        return jsonify({'success': True, 'message': 'Trade record added'})
+    except Exception as e:
+        return jsonify({'success': False, 'error': str(e)}), 500
+
+
 def register_to_coordinator(coordinator_addr, port, node_id):
     """注册到协调器"""
     import time

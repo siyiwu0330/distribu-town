@@ -43,6 +43,9 @@ class AIVillagerAgent:
         # 决策历史
         self.decision_history = []
         
+        # 交易跟踪
+        self.sent_trades_tracker = {}  # 跟踪已发送的交易请求
+        
         print(f"[AI Agent] 初始化完成，连接到村民节点: {villager_port}")
     
     def check_connection(self) -> bool:
@@ -151,6 +154,278 @@ class AIVillagerAgent:
             print(f"[AI Agent] 获取在线村民失败: {e}")
             return []
     
+    def analyze_p2p_opportunities(self, context: Dict) -> Dict:
+        """分析P2P交易机会"""
+        opportunities = {
+            'sell_opportunities': [],
+            'buy_opportunities': [],
+            'recommendations': []
+        }
+        
+        villager = context.get('villager', {})
+        occupation = villager.get('occupation')
+        inventory = villager.get('inventory', {})
+        villagers = context.get('villagers', [])
+        prices = context.get('prices', {})
+        
+        # 分析出售机会
+        if occupation == 'farmer' and inventory.get('wheat', 0) > 0:
+            # 农夫出售小麦给厨师
+            for other_villager in villagers:
+                if other_villager.get('occupation') == 'chef':
+                    other_inventory = other_villager.get('inventory', {})
+                    if other_inventory.get('wheat', 0) < 3:  # 厨师需要小麦
+                        quantity = min(inventory['wheat'], 3 - other_inventory.get('wheat', 0))
+                        if quantity > 0:
+                            target_node_id = other_villager['node_id']
+                            suggested_price = 7
+                            total_price = suggested_price * quantity
+                            
+                            # 检查是否已经发送过相同的交易请求
+                            if not self.has_sent_trade_request(target_node_id, 'wheat', quantity, total_price):
+                                opportunities['sell_opportunities'].append({
+                                    'target': target_node_id,
+                                    'target_name': other_villager.get('name', 'Unknown'),
+                                    'item': 'wheat',
+                                    'quantity': quantity,
+                                    'suggested_price': suggested_price,
+                                    'total_price': total_price,
+                                    'merchant_buy_price': prices.get('sell', {}).get('wheat', 5),
+                                    'merchant_sell_price': prices.get('buy', {}).get('wheat', 10),
+                                    'negotiation_message': f"Hi! I have {quantity}x wheat to sell for {total_price} gold total ({suggested_price} gold each). This is better than the merchant's buy price of 5 gold each. Would you like to buy?"
+                                })
+        
+        elif occupation == 'chef' and inventory.get('bread', 0) > 2:  # 保留2个面包自用
+            # 厨师出售面包给其他村民
+            for other_villager in villagers:
+                if other_villager.get('node_id') != villager.get('node_id'):
+                    other_inventory = other_villager.get('inventory', {})
+                    if other_inventory.get('bread', 0) < 2:  # 其他村民需要面包
+                        quantity = min(inventory['bread'] - 2, 2 - other_inventory.get('bread', 0))
+                        if quantity > 0:
+                            opportunities['sell_opportunities'].append({
+                                'target': other_villager['node_id'],
+                                'target_name': other_villager.get('name', 'Unknown'),
+                                'item': 'bread',
+                                'quantity': quantity,
+                                'suggested_price': 35,  # 介于22.5(merchant buy)和45(merchant sell)之间
+                                'total_price': 35 * quantity,
+                                'merchant_buy_price': prices.get('sell', {}).get('bread', 22.5),
+                                'merchant_sell_price': prices.get('buy', {}).get('bread', 45)
+                            })
+        
+        elif occupation == 'carpenter' and inventory.get('house', 0) > 0:
+            # 木工出售房子给没有房子的村民
+            for other_villager in villagers:
+                if other_villager.get('node_id') != villager.get('node_id'):
+                    other_inventory = other_villager.get('inventory', {})
+                    if other_inventory.get('house', 0) == 0:  # 没有房子
+                        opportunities['sell_opportunities'].append({
+                            'target': other_villager['node_id'],
+                            'target_name': other_villager.get('name', 'Unknown'),
+                            'item': 'house',
+                            'quantity': 1,
+                            'suggested_price': 180,  # 介于130(merchant buy)和260(merchant sell)之间
+                            'total_price': 180,
+                            'merchant_buy_price': prices.get('sell', {}).get('house', 130),
+                            'merchant_sell_price': prices.get('buy', {}).get('house', 260)
+                        })
+        
+        # 分析购买机会
+        if occupation == 'chef' and inventory.get('wheat', 0) < 3:
+            # 厨师从农夫购买小麦
+            for other_villager in villagers:
+                if other_villager.get('occupation') == 'farmer':
+                    other_inventory = other_villager.get('inventory', {})
+                    if other_inventory.get('wheat', 0) > 0:
+                        quantity = min(3 - inventory.get('wheat', 0), other_inventory['wheat'])
+                        if quantity > 0:
+                            target_node_id = other_villager['node_id']
+                            suggested_price = 7
+                            total_price = suggested_price * quantity
+                            
+                            # 检查是否已经发送过相同的交易请求
+                            if not self.has_sent_trade_request(target_node_id, 'wheat', quantity, total_price):
+                                opportunities['buy_opportunities'].append({
+                                    'target': target_node_id,
+                                    'target_name': other_villager.get('name', 'Unknown'),
+                                    'item': 'wheat',
+                                    'quantity': quantity,
+                                    'suggested_price': suggested_price,
+                                    'total_price': total_price,
+                                    'merchant_buy_price': prices.get('sell', {}).get('wheat', 5),
+                                    'merchant_sell_price': prices.get('buy', {}).get('wheat', 10),
+                                    'negotiation_message': f"Hi! I'd like to buy {quantity}x wheat from you for {total_price} gold total ({suggested_price} gold each). This is better than the merchant's price of 10 gold each. Are you interested?"
+                                })
+        
+        elif occupation == 'carpenter' and inventory.get('wood', 0) < 10:
+            # 木工从其他村民购买木材（如果有的话）
+            for other_villager in villagers:
+                if other_villager.get('node_id') != villager.get('node_id'):
+                    other_inventory = other_villager.get('inventory', {})
+                    if other_inventory.get('wood', 0) > 0:
+                        quantity = min(10 - inventory.get('wood', 0), other_inventory['wood'])
+                        if quantity > 0:
+                            opportunities['buy_opportunities'].append({
+                                'target': other_villager['node_id'],
+                                'target_name': other_villager.get('name', 'Unknown'),
+                                'item': 'wood',
+                                'quantity': quantity,
+                                'suggested_price': 7,  # 介于5(merchant buy)和10(merchant sell)之间
+                                'total_price': 7 * quantity,
+                                'merchant_buy_price': prices.get('sell', {}).get('wood', 5),
+                                'merchant_sell_price': prices.get('buy', {}).get('wood', 10)
+                            })
+        
+        return opportunities
+    
+    def _format_p2p_opportunities(self, opportunities: Dict) -> str:
+        """格式化P2P交易机会显示"""
+        if not opportunities:
+            return "No P2P opportunities available"
+        
+        result = []
+        
+        # 出售机会
+        sell_ops = opportunities.get('sell_opportunities', [])
+        if sell_ops:
+            result.append("🎯 SELL OPPORTUNITIES:")
+            for op in sell_ops:
+                profit_per_item = op['suggested_price'] - op['merchant_buy_price']
+                result.append(f"  → Sell {op['quantity']}x {op['item']} to {op['target_name']} ({op['target']})")
+                result.append(f"    Command: trade {op['target']} sell {op['item']} {op['quantity']} {op['total_price']}")
+                result.append(f"    Negotiation: send {op['target']} \"{op.get('negotiation_message', '')}\"")
+                result.append(f"    Price: {op['suggested_price']} gold each (vs merchant {op['merchant_buy_price']} gold)")
+                result.append(f"    Extra profit: +{profit_per_item * op['quantity']} gold")
+                result.append(f"    ⚠️ IMPORTANT: Use node ID '{op['target']}' not name '{op['target_name']}'")
+                result.append("")
+        
+        # 购买机会
+        buy_ops = opportunities.get('buy_opportunities', [])
+        if buy_ops:
+            result.append("💰 BUY OPPORTUNITIES:")
+            for op in buy_ops:
+                savings_per_item = op['merchant_sell_price'] - op['suggested_price']
+                result.append(f"  → Buy {op['quantity']}x {op['item']} from {op['target_name']} ({op['target']})")
+                result.append(f"    Command: trade {op['target']} buy {op['item']} {op['quantity']} {op['total_price']}")
+                result.append(f"    Negotiation: send {op['target']} \"{op.get('negotiation_message', '')}\"")
+                result.append(f"    Price: {op['suggested_price']} gold each (vs merchant {op['merchant_sell_price']} gold)")
+                result.append(f"    Savings: -{savings_per_item * op['quantity']} gold")
+                result.append(f"    ⚠️ IMPORTANT: Use node ID '{op['target']}' not name '{op['target_name']}'")
+                result.append("")
+        
+        if not sell_ops and not buy_ops:
+            return "No P2P opportunities available"
+        
+        return "\n".join(result)
+    
+    def check_villager_status(self, node_id: str) -> Dict:
+        """检查指定村民的状态"""
+        try:
+            # 从协调器获取节点信息
+            response = requests.get(f"{self.coordinator_url}/nodes", timeout=5)
+            if response.status_code != 200:
+                return {"error": "Cannot get nodes list"}
+            
+            nodes_data = response.json()
+            target_node = None
+            
+            # 查找目标节点
+            for node in nodes_data['nodes']:
+                if node['node_id'] == node_id:
+                    target_node = node
+                    break
+            
+            if not target_node:
+                return {"error": f"Node {node_id} not found"}
+            
+            # 获取目标村民的详细状态
+            villager_response = requests.get(f"http://{target_node['address']}/villager", timeout=5)
+            if villager_response.status_code != 200:
+                return {"error": f"Cannot get villager status for {node_id}"}
+            
+            villager_data = villager_response.json()
+            
+            # 检查是否可以交易
+            can_trade = True
+            reason = ""
+            
+            if villager_data.get('has_submitted_action', False):
+                can_trade = False
+                reason = "目标村民已提交行动，处于等待状态"
+            elif villager_data.get('stamina', 0) < 20:
+                can_trade = False
+                reason = "目标村民体力不足，无法交易"
+            
+            return {
+                "node_id": node_id,
+                "name": villager_data.get('name', 'Unknown'),
+                "occupation": villager_data.get('occupation', 'Unknown'),
+                "stamina": villager_data.get('stamina', 0),
+                "has_submitted_action": villager_data.get('has_submitted_action', False),
+                "can_trade": can_trade,
+                "reason": reason,
+                "inventory": villager_data.get('inventory', {})
+            }
+            
+        except Exception as e:
+            return {"error": f"Error checking villager status: {e}"}
+    
+    def send_negotiation_message(self, target: str, item: str, quantity: int, price: int, trade_type: str) -> bool:
+        """发送谈判消息"""
+        try:
+            # 构建谈判消息
+            if trade_type == 'buy':
+                message = f"Hi! I'd like to buy {quantity}x {item} from you for {price} gold total ({price//quantity} gold each). This is better than the merchant's price of {price//quantity + 3} gold each. Are you interested?"
+            else:  # sell
+                message = f"Hi! I have {quantity}x {item} to sell for {price} gold total ({price//quantity} gold each). This is better than the merchant's buy price of {price//quantity - 2} gold each. Would you like to buy?"
+            
+            # 发送消息
+            response = requests.post(f"{self.villager_url}/messages/send",
+                                   json={
+                                       'target': target,
+                                       'content': message,
+                                       'type': 'private'
+                                   }, timeout=10)
+            
+            if response.status_code == 200:
+                print(f"[AI Agent] 谈判消息已发送给 {target}: {message}")
+                return True
+            else:
+                print(f"[AI Agent] ✗ 发送谈判消息失败: HTTP {response.status_code}")
+                return False
+                
+        except Exception as e:
+            print(f"[AI Agent] ✗ 发送谈判消息异常: {e}")
+            return False
+    
+    def has_sent_trade_request(self, target: str, item: str, quantity: int, price: int) -> bool:
+        """检查是否已经发送过相同的交易请求"""
+        trade_key = f"{target}_{item}_{quantity}_{price}"
+        return trade_key in self.sent_trades_tracker
+    
+    def mark_trade_request_sent(self, target: str, item: str, quantity: int, price: int):
+        """标记交易请求已发送"""
+        trade_key = f"{target}_{item}_{quantity}_{price}"
+        self.sent_trades_tracker[trade_key] = {
+            "target": target,
+            "item": item,
+            "quantity": quantity,
+            "price": price,
+            "timestamp": time.time()
+        }
+    
+    def clear_old_trade_requests(self):
+        """清理旧的交易请求记录（超过5分钟的）"""
+        current_time = time.time()
+        old_keys = []
+        for key, trade_info in self.sent_trades_tracker.items():
+            if current_time - trade_info["timestamp"] > 300:  # 5分钟
+                old_keys.append(key)
+        
+        for key in old_keys:
+            del self.sent_trades_tracker[key]
+    
     def create_villager(self, name: str, occupation: str, gender: str, personality: str) -> bool:
         """创建村民"""
         try:
@@ -228,7 +503,7 @@ class AIVillagerAgent:
                     print(f"[AI Agent] ✗ 获取价格失败: HTTP {response.status_code}")
                     return False
             elif action == "trades":
-                response = requests.get(f"{self.villager_url}/trades", timeout=10)
+                response = requests.get(f"{self.villager_url}/trade/pending", timeout=10)
                 if response.status_code == 200:
                     trades_data = response.json()
                     print(f"[AI Agent] 收到的交易请求: {trades_data}")
@@ -252,7 +527,23 @@ class AIVillagerAgent:
                 quantity = kwargs.get('quantity')
                 price = kwargs.get('price')
                 
+                # 检查是否已经发送过相同的交易请求
+                if self.has_sent_trade_request(target, item, quantity, price):
+                    print(f"[AI Agent] ⚠️ 已经发送过相同的交易请求: {trade_action} {quantity}x {item} to {target} for {price} gold")
+                    return False
+                
+                # 检查目标村民状态
+                target_status = self.check_villager_status(target)
+                if 'error' in target_status:
+                    print(f"[AI Agent] ✗ 无法检查目标村民状态: {target_status['error']}")
+                    return False
+                
+                if not target_status.get('can_trade', True):
+                    print(f"[AI Agent] ⚠️ 目标村民无法交易: {target_status.get('reason', 'Unknown reason')}")
+                    return False
+                
                 # 首先从协调器获取目标节点地址
+                villager_state = self.get_villager_status() or {}
                 coordinator_addr = villager_state.get('coordinator_address', 'localhost:5000')
                 nodes_response = requests.get(f"http://{coordinator_addr}/nodes", timeout=5)
                 
@@ -286,6 +577,29 @@ class AIVillagerAgent:
                 if response.status_code == 200:
                     trade_data = response.json()
                     print(f"[AI Agent] 交易请求已发送: {trade_action} {quantity}x {item} for {price} gold to {target}")
+                    # 标记交易请求已发送
+                    self.mark_trade_request_sent(target, item, quantity, price)
+                    
+                    # 将交易记录添加到 villager 节点的 sent_trades 中
+                    try:
+                        sent_trade_record = {
+                            'trade_id': trade_data.get('trade_id', f"trade_{int(time.time())}"),
+                            'target': target,
+                            'target_name': target_status.get('name', target),
+                            'item': item,
+                            'quantity': quantity,
+                            'price': price,
+                            'action': trade_action,
+                            'timestamp': time.time(),
+                            'status': 'pending'
+                        }
+                        
+                        # 发送到 villager 节点记录
+                        requests.post(f"{self.villager_url}/sent_trades/add",
+                                   json=sent_trade_record, timeout=5)
+                    except Exception as e:
+                        print(f"[AI Agent] 记录发送交易失败: {e}")
+                    
                     return True
                 else:
                     print(f"[AI Agent] ✗ 发送交易请求失败: HTTP {response.status_code}")
@@ -407,7 +721,7 @@ You must follow the ReAct (Reasoning + Acting) pattern:
 - `price` - Check merchant prices (no action cost)
 - `trades` - Check received trade requests (no action cost)
 - `mytrades` - Check sent trade requests (no action cost)
-- `trade <target> <action> <item> <quantity> <price>` - Send trade request to villager
+- `trade <node_id> <buy/sell> <item> <quantity> <total_price>` - Send trade request to villager
 - `send <target> <message>` - Send message to another villager
 - `accept <trade_id>` - Accept a trade request
 - `reject <trade_id>` - Reject a trade request
@@ -419,6 +733,20 @@ You must follow the ReAct (Reasoning + Acting) pattern:
 - Hunger: -10 stamina daily, -20 extra if no sleep at night
 - **CRITICAL: Sleep requires a HOUSE! You cannot sleep without a house.**
 - **IMPORTANT: Buy and produce are SEPARATE decisions! Buy resources first, then produce in the next decision.**
+
+## P2P Trading Strategy (HIGHEST PRIORITY):
+- **Selling**: Always try to sell products to villagers at better prices than merchant buy prices
+- **Buying**: Always try to buy materials from villagers at better prices than merchant sell prices
+- **Smart Pricing**: Use prices between merchant buy/sell prices for maximum profit
+- **Targeting**: Use villager occupation and inventory to identify trade partners
+- **Status Check**: Before trading, check if target villager can trade (not waiting/submitted action)
+- **No Spam**: Don't send duplicate trade requests to the same villager
+- **Negotiation First**: Always send a negotiation message before sending trade request
+- **Fallback**: If P2P trading fails, fall back to merchant trading
+- **Examples**:
+  - Farmer: `send node2 "Hi! I have 3x wheat to sell for 21 gold total (7 gold each). This is better than the merchant's buy price of 5 gold each. Would you like to buy?"`
+  - Chef: `send node1 "Hi! I'd like to buy 3x wheat from you for 21 gold total (7 gold each). This is better than the merchant's price of 10 gold each. Are you interested?"`
+  - After negotiation: `trade node2 sell wheat 3 21` or `trade node1 buy wheat 3 21`
 
 ## Occupation Recipes:
 - Farmer: 1 seed → 5 wheat (costs 20 stamina)
@@ -506,13 +834,15 @@ You operate autonomously, following the game's rules, using REST/CLI actions to 
    * If stamina ≤ 35 → `eat` (if bread available).
    * If it's Night and stamina ≤ 45 → `sleep` (if housing available).
 
-2. **Production logic:**
-   * If stamina and materials are sufficient → `produce`.
-   * If missing inputs → `buy` from merchant.
-   * If unproductive → `idle`.
+2. **P2P Trading logic (highest priority for profit):**
+   * **Selling**: If you have products, try to sell to villagers at better prices than merchant.
+   * **Buying**: If you need materials, try to buy from villagers at better prices than merchant.
+   * **Targeting**: Use villager occupation and inventory to identify potential trade partners.
 
-3. **Trading strategy:**
-   * Keep essential items (bread, seeds, temp_room) for survival.
+3. **Production logic:**
+   * If stamina and materials are sufficient → `produce`.
+   * If missing inputs → `buy` from merchant (only if no P2P options).
+   * If unproductive → `idle`.
 
 4. **Night strategy:**
    * Prefer sleeping to recover stamina; avoid overwork unless safe.
@@ -524,17 +854,22 @@ You operate autonomously, following the game's rules, using REST/CLI actions to 
 **Farmer**
 * Focus on turning seeds → wheat efficiently.
 * Keep enough seeds for future cycles.
-* Sell wheat to chefs or merchant when price favorable.
+* **P2P Strategy**: Sell wheat to chefs at 6-8 gold each (vs merchant 5 gold buy, 10 gold sell).
+* **Buyer Targeting**: Look for chefs with low wheat inventory.
 
 **Chef**
 * Convert wheat → bread for both self-use and sales.
 * Always keep 2–3 bread for stamina recovery.
-* Buy wheat at low price; sell bread at profit.
+* **P2P Strategy**: 
+  - Buy wheat from farmers at 6-8 gold each (vs merchant 10 gold sell).
+  - Sell bread to villagers at 30-40 gold each (vs merchant 22.5 gold buy, 45 gold sell).
+* **Targeting**: Look for farmers selling wheat, villagers needing bread.
 
 **Carpenter**
 * Convert wood → house for high profit but large stamina cost.
 * Ensure own housing before selling houses.
-* Rest more frequently due to high stamina cost.
+* **P2P Strategy**: Sell houses at 150-200 gold (vs merchant 130 gold buy, 260 gold sell).
+* **Buyer Targeting**: Look for villagers without houses who have money.
 
 ---
 
@@ -806,6 +1141,9 @@ Trades Sent: {len(trades_sent)}
 Online Villagers: {len(villagers)}
 {chr(10).join([f"- {v['name']} ({v['occupation']})" for v in villagers])}
 
+=== P2P TRADING OPPORTUNITIES ===
+{self._format_p2p_opportunities(context.get('p2p_opportunities', {}))}
+
 === DECISION GUIDELINES ===
 Make smart decisions based on the above information:
 
@@ -821,18 +1159,28 @@ Make smart decisions based on the above information:
    - Chef: buy wheat → produce bread
    - Carpenter: buy wood → produce house
 
-3. ECONOMIC STRATEGY:
-   - Buy resources FIRST, then produce immediately
-   - Don't keep buying without producing!
-   - Sell excess products for profit
-   - **ACTIVE TRADING**: Look for opportunities to trade with other villagers!
-     * If you have excess items, offer them for sale to other villagers
-     * If you need resources, try buying from other villagers (may be cheaper than merchant)
-     * Use 'trade <node_id> buy/sell <item> <quantity> <total_price>' to initiate trades
-     * Check 'villagers' to see who's online and their occupations
-     * IMPORTANT: Use node IDs (node1, node2) not names!
+3. P2P TRADING STRATEGY (HIGHEST PRIORITY):
+   - **ALWAYS check P2P opportunities first** before buying from merchant!
+   - **Selling**: If you have products, try to sell to villagers at better prices than merchant
+   - **Buying**: If you need materials, try to buy from villagers at better prices than merchant
+   - **Smart Pricing**: Use prices between merchant buy/sell prices for maximum profit
+   - **Status Check**: Check if target villager can trade (not waiting/submitted action)
+   - **No Spam**: Don't send duplicate trade requests to the same villager
+   - **Negotiation First**: Always send a negotiation message before sending trade request
+   - **Fallback**: If P2P trading fails, fall back to merchant trading
+   - **Examples**:
+     * Farmer: `send node2 "Hi! I have 3x wheat to sell for 21 gold total (7 gold each). This is better than the merchant's buy price of 5 gold each. Would you like to buy?"`
+     * Chef: `send node1 "Hi! I'd like to buy 3x wheat from you for 21 gold total (7 gold each). This is better than the merchant's price of 10 gold each. Are you interested?"`
+     * After negotiation: `trade node2 sell wheat 3 21` or `trade node1 buy wheat 3 21`
+   - Use 'send <node_id> "<message>"' for negotiation, then 'trade <node_id> buy/sell <item> <quantity> <total_price>' for actual trade
+   - IMPORTANT: Use node IDs (node1, node2) not names!
 
-4. TRADING OPPORTUNITIES:
+4. PRODUCTION WORKFLOW (if no P2P opportunities):
+   - Buy resources from merchant FIRST, then produce immediately
+   - Don't keep buying without producing!
+   - Sell excess products to merchant for profit
+
+5. TRADING OPPORTUNITIES:
    - **Farmer**: Sell wheat to chefs, buy seeds from other farmers
    - **Chef**: Sell bread to everyone, buy wheat from farmers  
    - **Carpenter**: Sell houses to everyone, buy wood from other carpenters
@@ -1059,6 +1407,12 @@ Return JSON decision format."""
             'trades_sent': self.get_trades_sent(),
             'villagers': self.get_online_villagers()
         }
+        
+        # 清理旧的交易请求记录
+        self.clear_old_trade_requests()
+        
+        # 分析P2P交易机会
+        context['p2p_opportunities'] = self.analyze_p2p_opportunities(context)
         
         # 检查是否已经提交了行动
         villager = context['villager']
