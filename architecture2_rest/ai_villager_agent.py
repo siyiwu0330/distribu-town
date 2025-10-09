@@ -846,8 +846,9 @@ You must follow the ReAct (Reasoning + Acting) pattern:
   - Send and read messages
   - Eat bread to restore stamina
   - Check prices and trades
+  - **Send new trade requests to other villagers**
   - **BUT CANNOT: produce, sleep, buy, sell, or idle (these consume action points)**
-  - **IMPORTANT: If you try to execute forbidden actions, the system will automatically handle messages and trades instead**
+  - **IMPORTANT: Trading is ALWAYS allowed, even after submitting actions!**
 
 ## P2P Trading Strategy (HIGHEST PRIORITY):
 - **Selling**: Always try to sell products to villagers at better prices than merchant buy prices
@@ -857,6 +858,7 @@ You must follow the ReAct (Reasoning + Acting) pattern:
 - **Status Check**: Before trading, check if target villager can trade (not waiting/submitted action)
 - **No Spam**: Don't send duplicate trade requests to the same villager
 - **Negotiation First**: Always send a negotiation message before sending trade request
+- **CRITICAL**: After negotiation, ALWAYS send the actual trade request using `trade` command
 - **Fallback**: If P2P trading fails, fall back to merchant trading
 - **Examples**:
   - Farmer: `send node2 "Hi! I have 3x wheat to sell for 21 gold total (7 gold each). This is better than the merchant's buy price of 5 gold each. Would you like to buy?"`
