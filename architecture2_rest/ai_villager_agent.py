@@ -771,6 +771,8 @@ class AIVillagerAgent:
             print(f"  消息: {len(context.get('messages', []))} 条")
             print(f"  交易请求: {len(context.get('trades_received', []))} 条")
             print(f"  发送交易: {len(context.get('trades_sent', []))} 条")
+            print(f"  已提交行动: {context.get('villager', {}).get('has_submitted_action', False)}")
+            print(f"  其他村民状态: {[(v['name'], v.get('has_submitted_action', False)) for v in context.get('villagers', [])]}")
             
             # 调用GPT API
             response = openai.ChatCompletion.create(
@@ -843,6 +845,7 @@ You must follow the ReAct (Reasoning + Acting) pattern:
   - Eat bread to restore stamina
   - Check prices and trades
   - **BUT CANNOT: produce, sleep, buy, sell, or idle (these consume action points)**
+  - **IMPORTANT: If you try to execute forbidden actions, the system will automatically handle messages and trades instead**
 
 ## P2P Trading Strategy (HIGHEST PRIORITY):
 - **Selling**: Always try to sell products to villagers at better prices than merchant buy prices
@@ -1538,32 +1541,6 @@ Return JSON decision format."""
         villager = context['villager']
         has_submitted = villager.get('has_submitted_action', False)
         
-        if has_submitted:
-            print(f"[AI Agent] {self.villager_name} 已经提交了行动，检查是否有消息或交易需要处理...")
-            
-            # 检查是否有待处理的交易请求
-            trades_received = context.get('trades_received', [])
-            if trades_received:
-                print(f"[AI Agent] {self.villager_name} 发现 {len(trades_received)} 个待处理的交易请求")
-                # 处理交易请求（自动接受合理的交易）
-                self._handle_pending_trades(trades_received, context)
-            
-            # 检查是否有新消息
-            messages = context.get('messages', [])
-            unread_messages = [msg for msg in messages if not msg.get('read', False)]
-            if unread_messages:
-                print(f"[AI Agent] {self.villager_name} 发现 {len(unread_messages)} 条未读消息")
-                # 标记消息为已读
-                for msg in unread_messages:
-                    try:
-                        requests.post(f"{self.villager_url}/messages/mark_read",
-                                   json={'message_id': msg.get('id')}, timeout=5)
-                    except:
-                        pass
-            
-            print(f"[AI Agent] {self.villager_name} 已完成消息和交易处理，等待时间推进...")
-            return
-        
         # 生成决策
         print(f"[AI Agent] {self.villager_name} 正在思考...")
         decision = self.generate_decision(context)
@@ -1575,6 +1552,41 @@ Return JSON decision format."""
         print(f"[AI Agent] {self.villager_name} 思考: {reason}")
         print(f"[AI Agent] {self.villager_name} 行动: {command}")
         print(f"[AI Agent] 决策详情: {decision}")
+        
+        # 如果已经提交了行动，限制可执行的行动类型
+        if has_submitted:
+            print(f"[AI Agent] {self.villager_name} 已经提交了行动，只能执行非推进时间的行动...")
+            
+            # 定义不允许的行动（这些会推进时间）
+            forbidden_actions = ['produce', 'sleep', 'idle', 'buy', 'sell']
+            
+            if action in forbidden_actions:
+                print(f"[AI Agent] ⚠️ 已提交行动，不能执行 {action}，改为处理消息和交易")
+                
+                # 检查是否有待处理的交易请求
+                trades_received = context.get('trades_received', [])
+                if trades_received:
+                    print(f"[AI Agent] {self.villager_name} 发现 {len(trades_received)} 个待处理的交易请求")
+                    self._handle_pending_trades(trades_received, context)
+                
+                # 检查是否有新消息
+                messages = context.get('messages', [])
+                unread_messages = [msg for msg in messages if not msg.get('read', False)]
+                if unread_messages:
+                    print(f"[AI Agent] {self.villager_name} 发现 {len(unread_messages)} 条未读消息")
+                    # 标记消息为已读
+                    for msg in unread_messages:
+                        try:
+                            requests.post(f"{self.villager_url}/messages/mark_read",
+                                       json={'message_id': msg.get('id')}, timeout=5)
+                        except:
+                            pass
+                
+                print(f"[AI Agent] {self.villager_name} 已完成消息和交易处理，等待时间推进...")
+                return
+            
+            # 如果行动是允许的（如eat, trades, mytrades, trade, send等），继续执行
+            print(f"[AI Agent] {self.villager_name} 执行允许的行动: {action}")
         
         # 执行行动
         success = False
