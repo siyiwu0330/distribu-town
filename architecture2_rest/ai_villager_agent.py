@@ -180,23 +180,23 @@ class AIVillagerAgent:
         try:
             if action == "buy":
                 response = requests.post(
-                    f"{self.villager_url}/trade",
+                    f"{self.villager_url}/action/trade",
                     json={
+                        'action': 'buy',
                         'target': 'merchant',
                         'item': kwargs['item'],
-                        'quantity': kwargs['quantity'],
-                        'action': 'buy'
+                        'quantity': kwargs['quantity']
                     },
                     timeout=5
                 )
             elif action == "sell":
                 response = requests.post(
-                    f"{self.villager_url}/trade",
+                    f"{self.villager_url}/action/trade",
                     json={
+                        'action': 'sell',
                         'target': 'merchant',
                         'item': kwargs['item'],
-                        'quantity': kwargs['quantity'],
-                        'action': 'sell'
+                        'quantity': kwargs['quantity']
                     },
                     timeout=5
                 )
