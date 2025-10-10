@@ -184,7 +184,7 @@ class AIVillagerAgent:
                 response = requests.post(
                     f"{self.merchant_url}/buy",
                     json={
-                        'villager_id': self.villager_name,
+                        'buyer_id': self.villager_name,
                         'item': kwargs['item'],
                         'quantity': kwargs['quantity']
                     },
@@ -194,7 +194,7 @@ class AIVillagerAgent:
                 response = requests.post(
                     f"{self.merchant_url}/sell",
                     json={
-                        'villager_id': self.villager_name,
+                        'seller_id': self.villager_name,
                         'item': kwargs['item'],
                         'quantity': kwargs['quantity']
                     },
