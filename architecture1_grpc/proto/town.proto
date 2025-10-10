@@ -121,6 +121,11 @@ service VillagerNode {
     
     // 交易执行（由商人调用，用于原子操作）
     rpc TradeExecute(TradeExecuteRequest) returns (Status);
+    
+    // 消息系统
+    rpc SendMessage(SendMessageRequest) returns (SendMessageResponse);
+    rpc GetMessages(GetMessagesRequest) returns (GetMessagesResponse);
+    rpc MarkMessagesRead(MarkMessagesReadRequest) returns (MarkMessagesReadResponse);
 }
 
 // ============ 商人节点服务 ============
@@ -208,6 +213,47 @@ message CancelTradeRequest {
 message RejectTradeRequest {
     string trade_id = 1;
     string node_id = 2;
+}
+
+// 消息系统
+message Message {
+    string message_id = 1;
+    string from = 2;
+    string to = 3;
+    string content = 4;
+    string type = 5;  // 'private' or 'broadcast'
+    int64 timestamp = 6;
+    bool is_read = 7;
+}
+
+message SendMessageRequest {
+    string target = 1;
+    string content = 2;
+    string type = 3;  // 'private' or 'broadcast'
+}
+
+message SendMessageResponse {
+    bool success = 1;
+    string message = 2;
+    string message_id = 3;
+}
+
+message GetMessagesRequest {
+    string node_id = 1;
+}
+
+message GetMessagesResponse {
+    repeated Message messages = 1;
+}
+
+message MarkMessagesReadRequest {
+    string node_id = 1;
+    string message_id = 2;  // 可选，如果不提供则标记所有消息为已读
+}
+
+message MarkMessagesReadResponse {
+    bool success = 1;
+    string message = 2;
 }
 
 service MerchantNode {

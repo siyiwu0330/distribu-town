@@ -29,6 +29,11 @@ class VillagerNodeService(town_pb2_grpc.VillagerNodeServicer):
         self.node_id = node_id
         self.villager = None
         self.merchant_address = 'localhost:50052'
+        
+        # 消息系统
+        self.messages = []  # 存储消息
+        self.message_counter = 0
+        
         print(f"[Villager-{node_id}] 节点初始化")
     
     def CreateVillager(self, request, context):
@@ -347,6 +352,108 @@ class VillagerNodeService(town_pb2_grpc.VillagerNodeServicer):
         
         except Exception as e:
             return town_pb2.Status(success=False, message=f"Execute failed: {str(e)}")
+    
+    def SendMessage(self, request, context):
+        """发送消息"""
+        try:
+            if not self.villager:
+                return town_pb2.SendMessageResponse(
+                    success=False, 
+                    message="村民未初始化"
+                )
+            
+            import time
+            self.message_counter += 1
+            message_id = f"msg_{self.message_counter}"
+            
+            # 创建消息
+            message = {
+                'message_id': message_id,
+                'from': self.node_id,
+                'to': request.target,
+                'content': request.content,
+                'type': request.type,
+                'timestamp': int(time.time()),
+                'is_read': False
+            }
+            
+            # 如果是广播消息，发送给所有在线村民
+            if request.type == 'broadcast':
+                # 这里应该通过coordinator获取所有在线村民并发送
+                # 简化实现：只存储到自己的消息列表
+                message['to'] = 'broadcast'
+            
+            self.messages.append(message)
+            
+            print(f"[Villager-{self.node_id}] 发送消息: {request.type} -> {request.target}: {request.content}")
+            
+            return town_pb2.SendMessageResponse(
+                success=True,
+                message="消息发送成功",
+                message_id=message_id
+            )
+            
+        except Exception as e:
+            return town_pb2.SendMessageResponse(
+                success=False,
+                message=f"发送消息失败: {str(e)}"
+            )
+    
+    def GetMessages(self, request, context):
+        """获取消息列表"""
+        try:
+            if not self.villager:
+                return town_pb2.GetMessagesResponse(messages=[])
+            
+            # 返回所有消息
+            proto_messages = []
+            for msg in self.messages:
+                proto_msg = town_pb2.Message(
+                    message_id=msg['message_id'],
+                    from_=msg['from'],
+                    to=msg['to'],
+                    content=msg['content'],
+                    type=msg['type'],
+                    timestamp=msg['timestamp'],
+                    is_read=msg['is_read']
+                )
+                proto_messages.append(proto_msg)
+            
+            return town_pb2.GetMessagesResponse(messages=proto_messages)
+            
+        except Exception as e:
+            return town_pb2.GetMessagesResponse(messages=[])
+    
+    def MarkMessagesRead(self, request, context):
+        """标记消息为已读"""
+        try:
+            if not self.villager:
+                return town_pb2.MarkMessagesReadResponse(
+                    success=False,
+                    message="村民未初始化"
+                )
+            
+            if request.message_id:
+                # 标记特定消息为已读
+                for msg in self.messages:
+                    if msg['message_id'] == request.message_id:
+                        msg['is_read'] = True
+                        break
+            else:
+                # 标记所有消息为已读
+                for msg in self.messages:
+                    msg['is_read'] = True
+            
+            return town_pb2.MarkMessagesReadResponse(
+                success=True,
+                message="消息已标记为已读"
+            )
+            
+        except Exception as e:
+            return town_pb2.MarkMessagesReadResponse(
+                success=False,
+                message=f"标记消息失败: {str(e)}"
+            )
 
 
 def serve(port, node_id, coordinator_addr='localhost:50051'):

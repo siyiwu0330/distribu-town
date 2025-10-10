@@ -1081,7 +1081,6 @@ class VillagerCLI:
         print("\n村民间交易（P2P，不经过协调器）:")
         print("  trade <村民> buy <物品> <数量> <价格>  - 向其他村民购买")
         print("  trade <村民> sell <物品> <数量> <价格> - 向其他村民出售")
-        print("  trades          - 查看所有交易（发送的和收到的）")
         print("  mytrades        - 查看我的所有交易（发送的和收到的）")
         print("  accept <ID>     - 接受指定的交易请求（锁定资源）")
         print("  reject <ID>     - 拒绝指定的交易请求")
@@ -1274,12 +1273,6 @@ class VillagerCLI:
                     except ValueError:
                         print("\n✗ 数量和价格必须是整数")
                 
-                # 查看收到的交易请求
-                elif command == 'trades':
-                    print("💡 提示: 使用 'mytrades' 查看所有交易（发送的和收到的）")
-                    self.show_my_pending_trades()
-                
-                # 查看自己发起的交易请求
                 elif command == 'mytrades' or command == 'pending':
                     self.show_my_pending_trades()
                 

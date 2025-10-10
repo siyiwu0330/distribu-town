@@ -967,8 +967,7 @@ You must follow the ReAct (Reasoning + Acting) pattern:
 - `sleep` - Sleep to restore stamina (consumes action point, evening only, REQUIRES HOUSE OR TEMP_ROOM!)
 - `idle` - Skip current segment (consumes action point)
 - `price` - Check merchant prices (no action cost)
-- `trades` - Check received trade requests (no action cost) - **READ ONLY**
-- `mytrades` - Check sent trade requests (no action cost) - **READ ONLY**
+- `mytrades` - Check all trade requests (sent and received) (no action cost) - **READ ONLY**
 - `trade <node_id> <buy/sell> <item> <quantity> <total_price>` - **SEND trade request to villager** 
   **⚠️ IMPORTANT: Use node_id (like 'node1', 'node2') NOT villager names!**
 - `accept <trade_id>` - Accept received trade request (receiver only)

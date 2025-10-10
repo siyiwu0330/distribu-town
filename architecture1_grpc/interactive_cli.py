@@ -520,7 +520,98 @@ class VillagerCLI:
         except Exception as e:
             print(f"\n✗ 错误: {e}")
     
-    def get_merchant_prices(self):
+    def get_messages(self):
+        """获取消息列表"""
+        try:
+            my_node_id = self.get_node_id()
+            
+            channel, stub = self._get_villager_stub()
+            response = stub.GetMessages(town_pb2.GetMessagesRequest(
+                node_id=my_node_id
+            ))
+            channel.close()
+            
+            messages = []
+            for msg in response.messages:
+                messages.append({
+                    'message_id': msg.message_id,
+                    'from': msg.from_,
+                    'to': msg.to,
+                    'content': msg.content,
+                    'type': msg.type,
+                    'timestamp': msg.timestamp,
+                    'is_read': msg.is_read
+                })
+            return messages
+        except Exception as e:
+            print(f"[CLI] 获取消息失败: {e}")
+            return []
+    
+    def send_message(self, target, content, message_type='private'):
+        """发送消息"""
+        try:
+            channel, stub = self._get_villager_stub()
+            response = stub.SendMessage(town_pb2.SendMessageRequest(
+                target=target,
+                content=content,
+                type=message_type
+            ))
+            channel.close()
+            
+            if response.success:
+                print(f"\n✓ {response.message}")
+                if message_type == 'private':
+                    print(f"  发送给: {target}")
+                else:
+                    print(f"  广播消息")
+            else:
+                print(f"\n✗ {response.message}")
+        except Exception as e:
+            print(f"\n✗ 错误: {e}")
+    
+    def display_messages(self):
+        """显示消息列表"""
+        messages = self.get_messages()
+        
+        if not messages:
+            print("\n📭 没有消息")
+            return
+        
+        print("\n" + "="*50)
+        print("  消息列表")
+        print("="*50)
+        
+        for msg in messages:
+            status = "✓" if msg['is_read'] else "●"
+            print(f"\n{status} [{msg['message_id']}]")
+            print(f"  来自: {msg['from']}")
+            print(f"  内容: {msg['content']}")
+            if msg['type'] == 'private':
+                print(f"  发送给: {msg['to']}")
+            else:
+                print(f"  类型: 广播")
+            print()
+        
+        print("="*50)
+    
+    def mark_messages_read(self, message_id=None):
+        """标记消息为已读"""
+        try:
+            my_node_id = self.get_node_id()
+            
+            channel, stub = self._get_villager_stub()
+            response = stub.MarkMessagesRead(town_pb2.MarkMessagesReadRequest(
+                node_id=my_node_id,
+                message_id=message_id or ""
+            ))
+            channel.close()
+            
+            if response.success:
+                print(f"\n✓ {response.message}")
+            else:
+                print(f"\n✗ {response.message}")
+        except Exception as e:
+            print(f"\n✗ 错误: {e}")
         """获取商人价格"""
         try:
             channel, stub = self._get_merchant_stub()
@@ -563,14 +654,19 @@ class VillagerCLI:
         print("  nodes           - 查看在线村民")
         print("  trade <node_id> <buy/sell> <item> <qty> <price>")
         print("                  - 向村民发起交易")
-        print("  trades          - 查看所有交易（发送的和收到的）")
         print("  mytrades        - 查看我的所有交易（发送的和收到的）")
         print("  accept <trade_id>  - 接受交易请求")
         print("  reject <trade_id>  - 拒绝交易请求")
         print("  confirm <trade_id> - 确认交易")
         print("  cancel <trade_id>  - 取消交易")
-        print("")
-        print("【时间管理】")
+        
+        print("\n消息系统:")
+        print("  messages          - 查看消息列表")
+        print("  send <node> <内容> - 发送私聊消息")
+        print("  broadcast <内容>   - 发送广播消息")
+        print("  read [msg_id]      - 标记消息为已读")
+        
+        print("\n【时间管理】")
         print("  time            - 查看当前时间")
         print("  advance         - 推进时间(需要协调器)")
         print("")
@@ -671,10 +767,6 @@ class VillagerCLI:
                     else:
                         self.trade_with_villager(parts[1], parts[3], int(parts[4]), int(parts[5]), parts[2])
                 
-                elif action == 'trades':
-                    print("💡 提示: 使用 'mytrades' 查看所有交易（发送的和收到的）")
-                    self.show_my_pending_trades()
-                
                 elif action == 'mytrades':
                     self.show_my_pending_trades()
                 
@@ -701,6 +793,28 @@ class VillagerCLI:
                         print("用法: cancel <trade_id>")
                     else:
                         self.cancel_trade_request(parts[1])
+                
+                # 消息系统命令
+                elif action in ['messages', 'msgs']:
+                    self.display_messages()
+                
+                # 发送私聊消息
+                elif action == 'send' and len(parts) >= 3:
+                    target = parts[1]
+                    content = ' '.join(parts[2:])
+                    self.send_message(target, content, 'private')
+                
+                # 发送广播消息
+                elif action == 'broadcast' and len(parts) >= 2:
+                    content = ' '.join(parts[1:])
+                    self.send_message('', content, 'broadcast')
+                
+                # 标记消息为已读
+                elif action == 'read':
+                    if len(parts) >= 2:
+                        self.mark_messages_read(parts[1])
+                    else:
+                        self.mark_messages_read()
                 
                 else:
                     print(f"未知命令: {action}")
