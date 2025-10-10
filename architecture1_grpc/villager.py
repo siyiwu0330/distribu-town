@@ -18,7 +18,7 @@ sys.path.insert(0, os.path.join(os.path.dirname(__file__), '..'))
 from common.models import (
     Villager, Occupation, Gender, Inventory,
     PRODUCTION_RECIPES, MERCHANT_PRICES,
-    RENT_COST, SLEEP_STAMINA, NO_SLEEP_PENALTY
+    SLEEP_STAMINA, NO_SLEEP_PENALTY
 )
 
 
@@ -82,7 +82,7 @@ class VillagerNodeService(town_pb2_grpc.VillagerNodeServicer):
             stamina=self.villager.stamina,
             max_stamina=self.villager.max_stamina,
             inventory=inventory,
-            action_points=self.villager.action_points,
+            action_points=0,  # gRPC版本不使用action系统
             has_slept=self.villager.has_slept
         )
     
@@ -90,13 +90,6 @@ class VillagerNodeService(town_pb2_grpc.VillagerNodeServicer):
         """执行生产"""
         if not self.villager:
             return town_pb2.Status(success=False, message="Villager not initialized")
-        
-        # 检查是否有行动点
-        if self.villager.action_points <= 0:
-            return town_pb2.Status(
-                success=False,
-                message="没有行动点了"
-            )
         
         # 获取生产配方
         recipe = PRODUCTION_RECIPES.get(self.villager.occupation)
@@ -127,14 +120,12 @@ class VillagerNodeService(town_pb2_grpc.VillagerNodeServicer):
             self.villager.inventory.remove_item(item, quantity)
         
         self.villager.consume_stamina(recipe.stamina_cost)
-        self.villager.consume_action_point()
         
         # 生产产出
         self.villager.inventory.add_item(recipe.output_item, recipe.output_quantity)
         
         print(f"[Villager-{self.node_id}] {self.villager.name} 生产了 {recipe.output_quantity}x {recipe.output_item}")
         print(f"  消耗体力: {recipe.stamina_cost}, 剩余: {self.villager.stamina}")
-        print(f"  剩余行动点: {self.villager.action_points}")
         
         return town_pb2.Status(
             success=True,
@@ -252,28 +243,33 @@ class VillagerNodeService(town_pb2_grpc.VillagerNodeServicer):
         if self.villager.has_slept:
             return town_pb2.Status(success=False, message="今天已经睡过了")
         
-        # 检查是否有房子
+        # 检查是否有房子或临时房间券
         has_house = self.villager.inventory.has_item("house", 1)
+        has_temp_room = self.villager.inventory.has_item("temp_room", 1)
         
-        if not has_house:
-            # 需要租房
-            if not self.villager.inventory.remove_money(RENT_COST):
-                return town_pb2.Status(
-                    success=False,
-                    message=f"没有房子且货币不足支付租金 (需要{RENT_COST})"
-                )
-            print(f"[Villager-{self.node_id}] {self.villager.name} 支付租金 {RENT_COST}")
+        if not has_house and not has_temp_room:
+            return town_pb2.Status(
+                success=False,
+                message="没有房子或临时房间券，无法睡眠。请从商人处购买临时房间券或建造房子。"
+            )
+        
+        # 预处理睡眠（恢复在这里执行）
+        sleep_message = ""
+        if has_house:
+            sleep_message = "在自己的房子里睡眠"
+        else:  # has_temp_room
+            sleep_message = "使用临时房间券睡眠（将在每日结算时消耗）"
         
         # 恢复体力
         self.villager.restore_stamina(SLEEP_STAMINA)
         self.villager.has_slept = True
         
-        print(f"[Villager-{self.node_id}] {self.villager.name} 睡眠，恢复体力 {SLEEP_STAMINA}")
+        print(f"[Villager-{self.node_id}] {self.villager.name} {sleep_message}，恢复体力 {SLEEP_STAMINA}")
         print(f"  当前体力: {self.villager.stamina}/{self.villager.max_stamina}")
         
         return town_pb2.Status(
             success=True,
-            message=f"睡眠成功，恢复体力 {SLEEP_STAMINA}"
+            message=f"睡眠成功，恢复体力 {SLEEP_STAMINA}。{sleep_message}。"
         )
     
     def OnTimeAdvance(self, request, context):
@@ -295,7 +291,6 @@ class VillagerNodeService(town_pb2_grpc.VillagerNodeServicer):
             self.villager.reset_daily()
             print(f"[Villager-{self.node_id}] 新的一天！")
             print(f"  体力: {self.villager.stamina}/{self.villager.max_stamina}")
-            print(f"  行动点: {self.villager.action_points}")
         
         return town_pb2.Status(success=True, message="Time updated")
     

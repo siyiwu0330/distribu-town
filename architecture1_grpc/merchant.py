@@ -80,11 +80,11 @@ class MerchantNodeService(town_pb2_grpc.MerchantNodeServicer):
     def GetPrices(self, request, context):
         """获取价格表"""
         buy_prices = [
-            town_pb2.PriceInfo(item=item, price=price)
+            town_pb2.PriceInfo(item=item, price=int(price))
             for item, price in self.prices['buy'].items()
         ]
         sell_prices = [
-            town_pb2.PriceInfo(item=item, price=price)
+            town_pb2.PriceInfo(item=item, price=int(price))
             for item, price in self.prices['sell'].items()
         ]
         
