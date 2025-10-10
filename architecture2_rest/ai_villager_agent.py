@@ -93,8 +93,8 @@ class AIVillagerAgent:
             response = requests.get(f"{self.villager_url}/villager", timeout=5)
             if response.status_code == 200:
                 result = response.json()
-                if result['success']:
-                    return result['villager']
+                # REST API直接返回村民数据，不是包装在success/villager中
+                return result
             return None
         except:
             return None
