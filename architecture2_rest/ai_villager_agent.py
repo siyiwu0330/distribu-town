@@ -208,6 +208,9 @@ class AIVillagerAgent:
                 response = requests.post(f"{self.villager_url}/eat", timeout=5)
             elif action == "idle":
                 response = requests.post(f"{self.villager_url}/idle", timeout=5)
+            elif action == "price":
+                # price行动不需要调用API，直接返回成功
+                return True
             elif action == "send_message":
                 response = requests.post(
                     f"{self.villager_url}/messages/send",
