@@ -1,0 +1,17 @@
+# REST基础服务镜像：Coordinator + Merchant
+FROM distribu-town-base:latest
+
+# 复制REST架构文件
+COPY architecture2_rest/ /app/architecture2_rest/
+
+# 安装REST依赖
+RUN pip install --no-cache-dir -r /app/architecture2_rest/requirements.txt
+
+# 设置工作目录
+WORKDIR /app/architecture2_rest
+
+# 暴露端口
+EXPOSE 5000 5001
+
+# 启动脚本
+CMD ["./start_services.sh"]

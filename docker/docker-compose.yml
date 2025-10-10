@@ -1,0 +1,92 @@
+version: '3.8'
+
+services:
+  # gRPC版本服务
+  grpc-services:
+    build:
+      context: ..
+      dockerfile: docker/Dockerfile.grpc-services
+    ports:
+      - "50051:50051"  # Coordinator
+      - "50052:50052"  # Merchant
+    networks:
+      - distribu-town-grpc
+    restart: unless-stopped
+
+  grpc-villager-1:
+    build:
+      context: ..
+      dockerfile: docker/Dockerfile.grpc-villager
+    ports:
+      - "50053:50053"
+    environment:
+      - VILLAGER_PORT=50053
+    networks:
+      - distribu-town-grpc
+    depends_on:
+      - grpc-services
+    restart: unless-stopped
+    command: ["./start_villager_mode.sh", "--port", "50053"]
+
+  grpc-villager-2:
+    build:
+      context: ..
+      dockerfile: docker/Dockerfile.grpc-villager
+    ports:
+      - "50054:50054"
+    environment:
+      - VILLAGER_PORT=50054
+    networks:
+      - distribu-town-grpc
+    depends_on:
+      - grpc-services
+    restart: unless-stopped
+    command: ["./start_villager_mode.sh", "--port", "50054"]
+
+  # REST版本服务
+  rest-services:
+    build:
+      context: ..
+      dockerfile: docker/Dockerfile.rest-services
+    ports:
+      - "5000:5000"   # Coordinator
+      - "5001:5001"   # Merchant
+    networks:
+      - distribu-town-rest
+    restart: unless-stopped
+
+  rest-villager-1:
+    build:
+      context: ..
+      dockerfile: docker/Dockerfile.rest-villager
+    ports:
+      - "5002:5002"
+    environment:
+      - VILLAGER_PORT=5002
+    networks:
+      - distribu-town-rest
+    depends_on:
+      - rest-services
+    restart: unless-stopped
+    command: ["./start_villager_mode.sh", "--port", "5002"]
+
+  rest-villager-2:
+    build:
+      context: ..
+      dockerfile: docker/Dockerfile.rest-villager
+    ports:
+      - "5003:5003"
+    environment:
+      - VILLAGER_PORT=5003
+    networks:
+      - distribu-town-rest
+    depends_on:
+      - rest-services
+    restart: unless-stopped
+    command: ["./start_villager_mode.sh", "--port", "5003"]
+
+networks:
+  distribu-town-grpc:
+    driver: bridge
+  distribu-town-rest:
+    driver: bridge

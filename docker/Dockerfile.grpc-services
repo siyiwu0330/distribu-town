@@ -1,0 +1,17 @@
+# gRPC基础服务镜像：Coordinator + Merchant
+FROM distribu-town-base:latest
+
+# 复制gRPC架构文件
+COPY architecture1_grpc/ /app/architecture1_grpc/
+
+# 安装gRPC依赖
+RUN pip install --no-cache-dir -r /app/architecture1_grpc/requirements.txt
+
+# 设置工作目录
+WORKDIR /app/architecture1_grpc
+
+# 暴露端口
+EXPOSE 50051 50052
+
+# 启动脚本
+CMD ["./start_services.sh"]

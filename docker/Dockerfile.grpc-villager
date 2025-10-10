@@ -1,0 +1,33 @@
+# gRPC村民启动器镜像：支持CLI和AI模式
+FROM distribu-town-base:latest
+
+# 复制gRPC架构文件
+COPY architecture1_grpc/ /app/architecture1_grpc/
+
+# 安装gRPC依赖
+RUN pip install --no-cache-dir -r /app/architecture1_grpc/requirements.txt
+
+# 设置工作目录
+WORKDIR /app/architecture1_grpc
+
+# 暴露端口范围（50053-50099用于村民节点）
+EXPOSE 50053-50099
+
+# 创建启动脚本
+RUN echo '#!/bin/bash\n\
+if [ "$1" = "--cli" ]; then\n\
+    echo "Starting villager with CLI mode..."\n\
+    shift\n\
+    python interactive_cli.py "$@"\n\
+elif [ "$1" = "--ai" ]; then\n\
+    echo "Starting villager with AI mode..."\n\
+    shift\n\
+    python ai_villager_agent.py "$@"\n\
+else\n\
+    echo "Starting villager node..."\n\
+    ./start_villager.sh "$@"\n\
+fi' > /app/architecture1_grpc/start_villager_mode.sh && \
+    chmod +x /app/architecture1_grpc/start_villager_mode.sh
+
+# 默认启动命令
+CMD ["./start_villager_mode.sh"]
