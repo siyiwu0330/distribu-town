@@ -93,6 +93,13 @@ message SleepRequest {
     // 睡眠请求
 }
 
+message TradeExecuteRequest {
+    string action = 1;  // "pay", "refund", "add_item", "remove_item", "receive"
+    string item = 2;
+    int32 quantity = 3;
+    int32 money = 4;
+}
+
 service VillagerNode {
     // 创建/初始化村民
     rpc CreateVillager(CreateVillagerRequest) returns (Status);
@@ -111,6 +118,9 @@ service VillagerNode {
     
     // 时间推进通知（由协调器调用）
     rpc OnTimeAdvance(TimeAdvanceNotification) returns (Status);
+    
+    // 交易执行（由商人调用，用于原子操作）
+    rpc TradeExecute(TradeExecuteRequest) returns (Status);
 }
 
 // ============ 商人节点服务 ============
@@ -137,6 +147,69 @@ message PriceList {
     repeated PriceInfo sell_prices = 2;  // 商人从玩家收购的价格
 }
 
+// ============ 中心化交易系统 ============
+
+message CreateTradeRequest {
+    string initiator_id = 1;
+    string initiator_address = 2;
+    string target_id = 3;
+    string target_address = 4;
+    string offer_type = 5;  // "buy" or "sell"
+    string item = 6;
+    int32 quantity = 7;
+    int32 price = 8;
+}
+
+message CreateTradeResponse {
+    bool success = 1;
+    string message = 2;
+    string trade_id = 3;
+}
+
+message TradeInfo {
+    string trade_id = 1;
+    string initiator_id = 2;
+    string initiator_address = 3;
+    string target_id = 4;
+    string target_address = 5;
+    string offer_type = 6;
+    string item = 7;
+    int32 quantity = 8;
+    int32 price = 9;
+    string status = 10;  // "pending", "accepted", "rejected", "completed"
+    bool initiator_confirmed = 11;
+    bool target_confirmed = 12;
+}
+
+message ListTradesRequest {
+    string node_id = 1;
+    string type = 2;  // "pending", "sent", "all"
+}
+
+message ListTradesResponse {
+    repeated TradeInfo trades = 1;
+}
+
+message AcceptTradeRequest {
+    string trade_id = 1;
+    string node_id = 2;
+}
+
+message ConfirmTradeRequest {
+    string trade_id = 1;
+    string node_id = 2;
+}
+
+message CancelTradeRequest {
+    string trade_id = 1;
+    string node_id = 2;
+}
+
+message RejectTradeRequest {
+    string trade_id = 1;
+    string node_id = 2;
+}
+
 service MerchantNode {
     // 从商人处购买
     rpc BuyItem(BuyFromMerchantRequest) returns (Status);
@@ -149,5 +222,13 @@ service MerchantNode {
     
     // 时间推进通知
     rpc OnTimeAdvance(TimeAdvanceNotification) returns (Status);
+    
+    // 中心化交易管理
+    rpc CreateTrade(CreateTradeRequest) returns (CreateTradeResponse);
+    rpc ListTrades(ListTradesRequest) returns (ListTradesResponse);
+    rpc AcceptTrade(AcceptTradeRequest) returns (Status);
+    rpc ConfirmTrade(ConfirmTradeRequest) returns (Status);
+    rpc CancelTrade(CancelTradeRequest) returns (Status);
+    rpc RejectTrade(RejectTradeRequest) returns (Status);
 }
 

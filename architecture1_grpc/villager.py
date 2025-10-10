@@ -143,7 +143,7 @@ class VillagerNodeService(town_pb2_grpc.VillagerNodeServicer):
     
     def Trade(self, request, context):
         """执行交易
-        使用price字段传递action: 0=buy, 1=sell
+        现在统一使用中心化交易系统
         """
         if not self.villager:
             return town_pb2.Status(success=False, message="Villager not initialized")
@@ -151,16 +151,18 @@ class VillagerNodeService(town_pb2_grpc.VillagerNodeServicer):
         target_node = request.target_node
         item = request.item
         quantity = request.quantity
-        action = 'buy' if request.price == 0 else 'sell'
+        price = request.price
         
-        # 如果是与商人交易
+        # 如果是与商人交易（保持旧逻辑兼容）
         if target_node == 'merchant':
+            # 判断是buy还是sell（price==0表示buy）
+            action = 'buy' if price == 0 else 'sell'
             return self._trade_with_merchant(item, quantity, action, context)
         else:
-            # 村民间交易（暂未实现）
+            # 村民间交易暂未实现（需要前端支持）
             return town_pb2.Status(
                 success=False,
-                message="村民间交易暂未实现"
+                message="村民间交易请使用交互式CLI或AI Agent"
             )
     
     def _trade_with_merchant(self, item, quantity, action, context):
@@ -296,6 +298,60 @@ class VillagerNodeService(town_pb2_grpc.VillagerNodeServicer):
             print(f"  行动点: {self.villager.action_points}")
         
         return town_pb2.Status(success=True, message="Time updated")
+    
+    def TradeExecute(self, request, context):
+        """交易执行（原子操作）"""
+        if not self.villager:
+            return town_pb2.Status(success=False, message="Villager not initialized")
+        
+        action = request.action
+        
+        try:
+            if action == 'pay':
+                # 支付货币
+                money = request.money
+                if not self.villager.inventory.remove_money(money):
+                    return town_pb2.Status(success=False, message=f"货币不足")
+                print(f"[Villager-{self.node_id}] 支付 {money} 货币")
+                return town_pb2.Status(success=True, message="Payment success")
+            
+            elif action == 'refund':
+                # 退款
+                money = request.money
+                self.villager.inventory.add_money(money)
+                print(f"[Villager-{self.node_id}] 退款 {money} 货币")
+                return town_pb2.Status(success=True, message="Refund success")
+            
+            elif action == 'add_item':
+                # 添加物品
+                item = request.item
+                quantity = request.quantity
+                self.villager.inventory.add_item(item, quantity)
+                print(f"[Villager-{self.node_id}] 获得 {quantity}x {item}")
+                return town_pb2.Status(success=True, message="Item added")
+            
+            elif action == 'remove_item':
+                # 移除物品
+                item = request.item
+                quantity = request.quantity
+                if not self.villager.inventory.has_item(item, quantity):
+                    return town_pb2.Status(success=False, message=f"物品不足: {item}")
+                self.villager.inventory.remove_item(item, quantity)
+                print(f"[Villager-{self.node_id}] 移除 {quantity}x {item}")
+                return town_pb2.Status(success=True, message="Item removed")
+            
+            elif action == 'receive':
+                # 收款
+                money = request.money
+                self.villager.inventory.add_money(money)
+                print(f"[Villager-{self.node_id}] 收到 {money} 货币")
+                return town_pb2.Status(success=True, message="Money received")
+            
+            else:
+                return town_pb2.Status(success=False, message=f"Unknown action: {action}")
+        
+        except Exception as e:
+            return town_pb2.Status(success=False, message=f"Execute failed: {str(e)}")
 
 
 def serve(port, node_id, coordinator_addr='localhost:50051'):
