@@ -1021,10 +1021,11 @@ You must follow the ReAct (Reasoning + Acting) pattern:
 - One price check can inform multiple subsequent decisions
 
 ## P2P Trading Strategy (HIGH PRIORITY):
-- **Selling**: Try to sell products to villagers at better prices than merchant buy prices
-- **Buying**: Try to buy materials from villagers at better prices than merchant sell prices
+- **ACTIVE SELLING**: If you have products (wheat/bread/houses), ALWAYS try to sell them to villagers FIRST before selling to merchant!
+- **ACTIVE BUYING**: Try to buy materials from villagers at better prices than merchant sell prices
 - **Smart Pricing**: Use prices between merchant buy/sell prices (e.g., merchant buys at 5, sells at 10 → use 7)
 - **Targeting**: Farmers have wheat/seeds, Chefs have bread, Builders have wood
+- **SURVIVAL TRADING**: If you need bread for stamina but don't have any, try buying from chefs!
 - **No Spam**: Don't send duplicate trade requests to the same villager
 - **⚠️ DIRECT TRADING**: Send `trade` command DIRECTLY, NO negotiation messages!
 - **Commands**: `trades`=view received, `mytrades`=view sent, `trade`=send new request
@@ -1032,6 +1033,7 @@ You must follow the ReAct (Reasoning + Acting) pattern:
 - **Examples (DO THIS - USE NODE_ID)**:
   - Farmer (node1) selling to Chef (node2): `trade node2 sell wheat 5 35` (5 wheat at 7 gold each)
   - Chef (node2) buying from Farmer (node1): `trade node1 buy wheat 3 21` (3 wheat at 7 gold each)
+  - **SURVIVAL**: Farmer buying bread from Chef: `trade node2 buy bread 2 30` (2 bread at 15 gold each)
 
 ## Trading Workflow (Centralized System via Merchant):
 1. **Initiate Phase**: Use `trade` command to create trade request (status: pending)
@@ -1164,6 +1166,7 @@ You operate autonomously, following the game's rules, using REST/CLI actions to 
 
 1. **Survival first:**
    * If stamina ≤ 35 → `eat` (if bread available) **⚠️ MUST HAVE BREAD IN INVENTORY!**
+   * If stamina ≤ 35 and NO bread → Try buying bread from chefs: `trade nodeX buy bread 2 30`
    * If it's Night and stamina ≤ 45 → `sleep` (if housing available).
 
 2. **Production logic (HIGH PRIORITY):**
@@ -1201,10 +1204,12 @@ You operate autonomously, following the game's rules, using REST/CLI actions to 
 **Chef**
 * Convert wheat → bread for both self-use and sales.
 * Always keep 2–3 bread for stamina recovery.
+* **ACTIVE SELLING**: If you have >5 bread, ALWAYS try to sell excess bread to villagers!
 * **P2P Strategy**: 
   - Buy wheat from farmers at 6-8 gold each (vs merchant 10 gold sell).
   - Sell bread to villagers at 30-40 gold each (vs merchant 22.5 gold buy, 45 gold sell).
 * **Targeting**: Look for farmers selling wheat, villagers needing bread.
+* **SURVIVAL SERVICE**: Help other villagers by selling bread when they need it!
 
 **Carpenter**
 * Convert wood → house for high profit but large stamina cost.
@@ -1635,19 +1640,19 @@ Make smart decisions based on the above information:
 
 3. P2P TRADING STRATEGY (HIGHEST PRIORITY):
    - **ALWAYS check P2P opportunities first** before buying from merchant!
-   - **Selling**: If you have products, try to sell to villagers at better prices than merchant
-   - **Buying**: If you need materials, try to buy from villagers at better prices than merchant
+   - **ACTIVE SELLING**: If you have products (wheat/bread/houses), ALWAYS try to sell to villagers FIRST!
+   - **ACTIVE BUYING**: If you need materials, try to buy from villagers at better prices than merchant
+   - **SURVIVAL TRADING**: If you need bread for stamina but don't have any, try buying from chefs!
    - **Smart Pricing**: Use prices between merchant buy/sell prices for maximum profit
    - **Status Check**: Check if target villager can trade (not waiting/submitted action)
    - **No Spam**: Don't send duplicate trade requests to the same villager
-   - **Negotiation First**: Always send a negotiation message before sending trade request
    - **No Duplicate Messages**: Check "Recently Sent Messages" above - DON'T send the same/similar messages again!
    - **Fallback**: If P2P trading fails, fall back to merchant trading
    - **Examples**:
-     * Farmer: `send node2 "Hi! I have 3x wheat to sell for 21 gold total (7 gold each). This is better than the merchant's buy price of 5 gold each. Would you like to buy?"`
-     * Chef: `send node1 "Hi! I'd like to buy 3x wheat from you for 21 gold total (7 gold each). This is better than the merchant's price of 10 gold each. Are you interested?"`
-     * After negotiation: `trade node2 sell wheat 3 21` or `trade node1 buy wheat 3 21`
-   - Use 'send <node_id> "<message>"' for negotiation, then 'trade <node_id> buy/sell <item> <quantity> <total_price>' for actual trade
+     * Farmer selling wheat: `trade node2 sell wheat 3 21` (3 wheat at 7 gold each)
+     * Chef selling bread: `trade node1 sell bread 2 30` (2 bread at 15 gold each)
+     * Farmer buying bread for survival: `trade node2 buy bread 2 30` (2 bread at 15 gold each)
+   - Use 'trade <node_id> buy/sell <item> <quantity> <total_price>' for actual trade
    - IMPORTANT: Use node IDs (node1, node2) not names!
 
 4. PRODUCTION WORKFLOW (if no P2P opportunities):
