@@ -178,9 +178,9 @@ class VillagerCLI:
             channel, stub = self._get_coordinator_stub()
             time_info = stub.GetCurrentTime(town_pb2.Empty())
             channel.close()
-            print(f"\n当前时间: Day {time_info.day} - {time_info.time_of_day}\n")
+            return f"Day {time_info.day} - {time_info.time_of_day}"
         except Exception as e:
-            print(f"\n✗ 错误: {e}")
+            return "Unknown"
     
     def get_node_id(self):
         """获取本节点ID (从coordinator查询)"""
@@ -708,7 +708,7 @@ class VillagerCLI:
         
         while True:
             try:
-                cmd = input("> ").strip()
+                cmd = input(f"[{self.get_current_time()}] > ").strip()
                 
                 if not cmd:
                     continue
@@ -743,7 +743,7 @@ class VillagerCLI:
                     self.sleep()
                 
                 elif action == 'time':
-                    self.get_current_time()
+                    print(f"\n当前时间: {self.get_current_time()}")
                 
                 elif action == 'advance':
                     try:

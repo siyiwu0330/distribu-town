@@ -415,7 +415,8 @@ class VillagerNodeService(town_pb2_grpc.VillagerNodeServicer):
                                 # 简化实现：通过HTTP请求发送
                                 import requests
                                 try:
-                                    requests.post(f"http://{node.address}/messages/receive", 
+                                    http_port = int(node.address.split(':')[1]) + 1000
+                                    requests.post(f"http://{node.address.split(':')[0]}:{http_port}/messages/receive", 
                                                 json=receive_message, timeout=2)
                                 except:
                                     pass  # 忽略发送失败
@@ -459,7 +460,7 @@ class VillagerNodeService(town_pb2_grpc.VillagerNodeServicer):
                                 'timestamp': int(time.time()),
                                 'is_read': False
                             }
-                            requests.post(f"http://{target_address}/messages/receive", 
+                            requests.post(f"http://{target_address.split(':')[0]}:{int(target_address.split(':')[1]) + 1000}/messages/receive", 
                                         json=receive_message, timeout=2)
                         except Exception as e:
                             print(f"[Villager-{self.node_id}] 发送私聊消息到 {request.target} 失败: {e}")
