@@ -18,7 +18,7 @@ class AIVillagerAgent:
     """AI村民代理"""
     
     def __init__(self, villager_port: int, coordinator_port: int = 5000, merchant_port: int = 5001, 
-                 api_key: str = None, model: str = "gpt-4o"):
+                 api_key: str = None, model: str = "gpt-4.1", use_react: bool = False):
         self.villager_url = f"http://localhost:{villager_port}"
         self.coordinator_url = f"http://localhost:{coordinator_port}"
         self.merchant_url = f"http://localhost:{merchant_port}"
@@ -27,6 +27,7 @@ class AIVillagerAgent:
         # OpenAI配置
         self.api_key = api_key
         self.model = model
+        self.use_react = use_react
         if api_key:
             openai.api_key = api_key
         
