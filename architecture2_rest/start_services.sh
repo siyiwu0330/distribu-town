@@ -13,6 +13,20 @@ echo "1. 清理旧进程..."
 pkill -9 -f 'python.*(coordinator|merchant)\.py' 2>/dev/null
 sleep 1
 
+# 检查并清理端口占用
+for port in 5000 5001; do
+    if lsof -i :$port >/dev/null 2>&1; then
+        echo "⚠ 端口 $port 已被占用，正在清理..."
+        PID=$(lsof -ti :$port)
+        if [ ! -z "$PID" ]; then
+            echo "   发现进程 PID: $PID"
+            kill -9 $PID 2>/dev/null
+            sleep 1
+            echo "✓ 端口 $port 已清理"
+        fi
+    fi
+done
+
 # 启动coordinator
 echo "2. 启动Coordinator (端口5000)..."
 python coordinator.py --port 5000 > /tmp/rest_coord.log 2>&1 &
