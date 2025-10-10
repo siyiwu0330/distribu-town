@@ -2231,6 +2231,11 @@ Return JSON decision format."""
             if not self.create_villager(name, occupation, gender, personality):
                 print("[AI Agent] ✗ 村民创建失败")
                 return
+        else:
+            # 重新连接时，更新村民信息
+            self.villager_info = villager_status
+            self.villager_name = villager_status.get('name', 'Unknown')
+            self.villager_occupation = villager_status.get('occupation', 'Unknown')
         
         print(f"[AI Agent] ✓ 村民 {self.villager_name} 准备就绪")
         print("[AI Agent] 输入命令:")
