@@ -613,7 +613,9 @@ def serve(port, node_id, coordinator_addr='localhost:50051'):
                 return jsonify({'success': False, 'message': str(e)}), 500
         return receive_message
     
-    app.route('/messages/receive', methods=['POST'])(make_receive_message(villager_service, node_id))
+    # 注册消息接收路由
+    receive_func = make_receive_message(villager_service, node_id)
+    app.add_url_rule('/messages/receive', 'receive_message', receive_func, methods=['POST'])
     
     @app.route('/health', methods=['GET'])
     def health_check():
