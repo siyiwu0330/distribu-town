@@ -610,9 +610,18 @@ def serve(port, node_id, coordinator_addr='localhost:50051'):
         """健康检查端点"""
         return jsonify({'status': 'healthy', 'node_id': node_id})
     
+    @app.route('/test', methods=['GET'])
+    def test_endpoint():
+        """测试端点"""
+        return jsonify({'message': f'HTTP server working for {node_id}', 'port': port + 1000})
+    
     # 在单独线程中启动HTTP服务器
     def run_http_server():
-        app.run(host='0.0.0.0', port=port + 1000, debug=False)
+        try:
+            print(f"[Villager-{node_id}] 正在启动HTTP服务器，端口: {port + 1000}")
+            app.run(host='0.0.0.0', port=port + 1000, debug=False)
+        except Exception as e:
+            print(f"[Villager-{node_id}] HTTP服务器启动失败: {e}")
     
     http_thread = threading.Thread(target=run_http_server, daemon=True)
     http_thread.start()
