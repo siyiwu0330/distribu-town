@@ -151,6 +151,10 @@ class MerchantNodeService(town_pb2_grpc.MerchantNodeServicer):
                 # 我发起的交易（我是initiator）
                 if trade_data['initiator_id'] == node_id:
                     trades.append(self._convert_trade_to_proto(trade_data))
+            elif trade_type == 'received':
+                # 我收到的交易（我是target）
+                if trade_data['target_id'] == node_id:
+                    trades.append(self._convert_trade_to_proto(trade_data))
             elif trade_type == 'all':
                 # 所有相关交易
                 if trade_data['initiator_id'] == node_id or trade_data['target_id'] == node_id:

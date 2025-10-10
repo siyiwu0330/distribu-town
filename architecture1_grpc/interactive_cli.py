@@ -307,47 +307,89 @@ class VillagerCLI:
             print(f"\n✗ 错误: {e}")
     
     def show_my_pending_trades(self):
-        """查看我发起的交易"""
+        """查看我的所有交易（发送的和收到的）"""
         try:
             my_node_id = self.get_node_id()
             
             channel, stub = self._get_merchant_stub()
             response = stub.ListTrades(town_pb2.ListTradesRequest(
                 node_id=my_node_id,
-                type='sent'
+                type='all'
             ))
             channel.close()
             
             if not response.trades:
-                print("\n你没有发起的交易\n")
+                print("\n你没有相关交易\n")
                 return
             
             print("\n" + "="*50)
-            print("  我发起的交易")
+            print("  我的交易")
             print("="*50)
+            
+            # 分类显示
+            sent_trades = []
+            received_trades = []
+            
             for trade in response.trades:
-                print(f"\n交易ID: {trade.trade_id}")
-                print(f"  对方: {trade.target_id}")
-                print(f"  类型: {trade.offer_type}")
-                print(f"  物品: {trade.item} x{trade.quantity}")
-                print(f"  价格: {trade.price}")
-                
-                # 根据状态显示不同的提示
-                if trade.status == 'accepted':
-                    print(f"  状态: ✓ 对方已接受（等待双方确认）")
-                    if not trade.initiator_confirmed:
-                        print(f"  💡 操作: confirm {trade.trade_id}")
-                    elif not trade.target_confirmed:
-                        print(f"  💡 等待: 对方确认中...")
-                    else:
-                        print(f"  💡 状态: 双方已确认，交易将自动完成")
-                elif trade.status == 'pending':
-                    print(f"  状态: ⏳ 等待对方接受")
-                    print(f"  💡 操作: 等待对方响应或 cancel {trade.trade_id}")
-                elif trade.status == 'rejected':
-                    print(f"  状态: ✗ 已被拒绝")
-                elif trade.status == 'completed':
-                    print(f"  状态: ✓ 交易完成")
+                if trade.initiator_id == my_node_id:
+                    sent_trades.append(trade)
+                else:
+                    received_trades.append(trade)
+            
+            # 显示我发起的交易
+            if sent_trades:
+                print("\n📤 我发起的交易:")
+                for trade in sent_trades:
+                    print(f"\n交易ID: {trade.trade_id}")
+                    print(f"  对方: {trade.target_id}")
+                    print(f"  类型: {trade.offer_type}")
+                    print(f"  物品: {trade.item} x{trade.quantity}")
+                    print(f"  价格: {trade.price}")
+                    
+                    # 根据状态显示不同的提示
+                    if trade.status == 'accepted':
+                        print(f"  状态: ✓ 对方已接受（等待双方确认）")
+                        if not trade.initiator_confirmed:
+                            print(f"  💡 操作: confirm {trade.trade_id}")
+                        elif not trade.target_confirmed:
+                            print(f"  💡 等待: 对方确认中...")
+                        else:
+                            print(f"  💡 状态: 双方已确认，交易将自动完成")
+                    elif trade.status == 'pending':
+                        print(f"  状态: ⏳ 等待对方接受")
+                        print(f"  💡 操作: 等待对方响应或 cancel {trade.trade_id}")
+                    elif trade.status == 'rejected':
+                        print(f"  状态: ✗ 已被拒绝")
+                    elif trade.status == 'completed':
+                        print(f"  状态: ✓ 交易完成")
+            
+            # 显示我收到的交易
+            if received_trades:
+                print("\n📥 我收到的交易:")
+                for trade in received_trades:
+                    print(f"\n交易ID: {trade.trade_id}")
+                    print(f"  发起方: {trade.initiator_id}")
+                    print(f"  类型: {trade.offer_type}")
+                    print(f"  物品: {trade.item} x{trade.quantity}")
+                    print(f"  价格: {trade.price}")
+                    
+                    # 根据状态显示不同的提示
+                    if trade.status == 'pending':
+                        print(f"  状态: ⏳ 待处理")
+                        print(f"  💡 操作: accept {trade.trade_id} 或 reject {trade.trade_id}")
+                    elif trade.status == 'accepted':
+                        print(f"  状态: ✓ 已接受（等待双方确认）")
+                        if not trade.target_confirmed:
+                            print(f"  💡 操作: confirm {trade.trade_id}")
+                        elif not trade.initiator_confirmed:
+                            print(f"  💡 等待: 对方确认中...")
+                        else:
+                            print(f"  💡 状态: 双方已确认，交易将自动完成")
+                    elif trade.status == 'rejected':
+                        print(f"  状态: ✗ 已拒绝")
+                    elif trade.status == 'completed':
+                        print(f"  状态: ✓ 交易完成")
+            
             print("="*50 + "\n")
         except Exception as e:
             print(f"\n✗ 错误: {e}")
@@ -433,35 +475,8 @@ class VillagerCLI:
             channel.close()
             
             if response.success:
-                print(f"\n✓ {response.message}")
-                
-                # 检查交易是否真正完成（双方都已确认）
-                try:
-                    # 重新获取交易状态
-                    channel, stub = self._get_merchant_stub()
-                    trade_response = stub.ListTrades(town_pb2.ListTradesRequest(
-                        node_id=my_node_id,
-                        type='sent'
-                    ))
-                    channel.close()
-                    
-                    # 查找当前交易
-                    current_trade = None
-                    for trade in trade_response.trades:
-                        if trade.trade_id == trade_id:
-                            current_trade = trade
-                            break
-                    
-                    if current_trade and current_trade.status == 'completed':
-                        print(f"💡 交易确认完成！资源已交换")
-                        print(f"   使用 'info' 查看最新状态\n")
-                        self.display_villager_info()
-                    else:
-                        print(f"💡 确认成功，等待对方确认")
-                        print(f"   使用 'mytrades' 查看交易状态\n")
-                except:
-                    print(f"💡 确认成功，等待对方确认")
-                    print(f"   使用 'mytrades' 查看交易状态\n")
+                print(f"\n✓ 交易已确认")
+                print(f"   使用 'mytrades' 查看交易状态\n")
             else:
                 print(f"\n✗ {response.message}\n")
         except Exception as e:
@@ -548,8 +563,8 @@ class VillagerCLI:
         print("  nodes           - 查看在线村民")
         print("  trade <node_id> <buy/sell> <item> <qty> <price>")
         print("                  - 向村民发起交易")
-        print("  trades          - 查看待处理的交易请求")
-        print("  mytrades        - 查看我发起的交易")
+        print("  trades          - 查看所有交易（发送的和收到的）")
+        print("  mytrades        - 查看我的所有交易（发送的和收到的）")
         print("  accept <trade_id>  - 接受交易请求")
         print("  reject <trade_id>  - 拒绝交易请求")
         print("  confirm <trade_id> - 确认交易")
@@ -657,7 +672,8 @@ class VillagerCLI:
                         self.trade_with_villager(parts[1], parts[3], int(parts[4]), int(parts[5]), parts[2])
                 
                 elif action == 'trades':
-                    self.check_pending_trades()
+                    print("💡 提示: 使用 'mytrades' 查看所有交易（发送的和收到的）")
+                    self.show_my_pending_trades()
                 
                 elif action == 'mytrades':
                     self.show_my_pending_trades()
