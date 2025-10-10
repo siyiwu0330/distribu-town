@@ -2,20 +2,28 @@
 
 ## 快速开始
 
-### 1. 启动所有节点
+### 1. 启动基础服务
 
 ```bash
 cd architecture1_grpc
-./test_start.sh
+./start_services.sh
 ```
 
 这会启动：
 - Coordinator (端口 50051)
-- Merchant (端口 50052) 
-- Villager node1 (端口 50053)
-- Villager node2 (端口 50054)
+- Merchant (端口 50052)
 
-### 2. 使用交互式CLI
+### 2. 启动村民节点
+
+```bash
+# 启动第一个村民节点
+./start_villager.sh 50053 node1
+
+# 启动第二个村民节点（新终端）
+./start_villager.sh 50054 node2
+```
+
+### 3. 使用交互式CLI
 
 #### 连接到node1
 ```bash
@@ -58,27 +66,28 @@ python interactive_cli.py --port 50054
 > info                      # 查看结果
 ```
 
-### 3. 使用AI Agent托管
+### 4. 使用AI Agent托管
 
 ```bash
-python ai_agent_grpc.py --port 50053 --name Alice --occupation farmer --gender female --personality "勤劳的农夫" --api-key YOUR_OPENAI_API_KEY
+python ai_agent_grpc.py --port 50054 --name Alice --occupation chef --gender female --personality "test" 
 ```
 
 ## 测试步骤
 
 ### 步骤1: 基础功能测试
-1. 启动节点：`./test_start.sh`
-2. 创建村民：使用CLI创建Alice和Bob
-3. 测试生产：`produce`命令
-4. 测试商人交易：`buy`/`sell`命令
-5. 测试村民交易：`trade`命令
+1. 启动基础服务：`./start_services.sh`
+2. 启动村民节点：`./start_villager.sh 50053 node1`
+3. 创建村民：使用CLI创建Alice
+4. 测试生产：`produce`命令
+5. 测试商人交易：`buy`/`sell`命令
 
 ### 步骤2: 交易流程测试
-1. Alice发起交易：`trade node2 sell wheat 3 50`
-2. Bob查看交易：`trades`
-3. Bob接受交易：`accept trade_1`
-4. 双方确认：`confirm trade_1`
-5. 检查结果：`info`
+1. 启动第二个村民：`./start_villager.sh 50054 node2`
+2. Alice发起交易：`trade node2 sell wheat 3 50`
+3. Bob查看交易：`trades`
+4. Bob接受交易：`accept trade_1`
+5. 双方确认：`confirm trade_1`
+6. 检查结果：`info`
 
 ### 步骤3: AI Agent测试
 1. 启动AI Agent
@@ -87,26 +96,30 @@ python ai_agent_grpc.py --port 50053 --name Alice --occupation farmer --gender f
 
 ## 常见问题
 
-### 问题1: 节点启动失败
-**症状**: `./test_start.sh`后没有输出
+### 问题1: 基础服务启动失败
+**症状**: `./start_services.sh`后没有输出
 **解决**: 
 ```bash
 # 检查端口占用
-lsof -i :50051-50054
+lsof -i :50051-50052
 
 # 手动启动看错误
 python coordinator.py --port 50051
 ```
 
-### 问题2: CLI连接失败
+### 问题2: 村民节点启动失败
+**症状**: `./start_villager.sh`失败
+**解决**: 确保基础服务已启动，检查端口冲突
+
+### 问题3: CLI连接失败
 **症状**: "无法连接到村民节点"
 **解决**: 确保节点已启动，检查端口
 
-### 问题3: 村民创建失败
+### 问题4: 村民创建失败
 **症状**: "Villager not initialized"
 **解决**: 先运行`create`命令创建村民
 
-### 问题4: 交易失败
+### 问题5: 交易失败
 **症状**: 交易创建/接受/确认失败
 **解决**: 检查双方资源是否充足
 
@@ -140,4 +153,3 @@ python coordinator.py --port 50051
 4. 每个步骤遇到问题请及时反馈
 
 我会根据您的反馈逐步修复问题！
-

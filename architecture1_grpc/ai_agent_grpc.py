@@ -7,6 +7,8 @@ AI Agent启动器 - gRPC版本
 import sys
 import os
 import argparse
+import threading
+import time
 
 # 添加路径
 sys.path.insert(0, os.path.dirname(__file__))
@@ -291,6 +293,149 @@ class GRPCAIAgent(AIVillagerAgent):
         
         else:
             return False, f"Unknown action: {action}"
+    
+    def start(self):
+        """启动AI Agent"""
+        if not self.api_key:
+            print("⚠ 警告: 没有提供OpenAI API Key，AI Agent将以模拟模式运行")
+            print("   设置环境变量: export OPENAI_API_KEY=your_key")
+            print("   或使用参数: --api-key your_key")
+            print("")
+        
+        self.running = True
+        print(f"[gRPC AI Agent] 开始托管村民: {self.villager_name}")
+        print("   按 Ctrl+C 停止")
+        print("")
+        
+        # 启动决策线程
+        self.decision_thread = threading.Thread(target=self._decision_loop, daemon=True)
+        self.decision_thread.start()
+    
+    def stop(self):
+        """停止AI Agent"""
+        self.running = False
+        if self.decision_thread:
+            self.decision_thread.join(timeout=2)
+        print("[gRPC AI Agent] 已停止")
+    
+    def _decision_loop(self):
+        """决策循环"""
+        while self.running:
+            try:
+                # 获取当前状态
+                villager_state = self.get_villager_status()
+                if not villager_state:
+                    print("[gRPC AI Agent] 无法获取村民状态，等待重试...")
+                    time.sleep(5)
+                    continue
+                
+                # 获取当前时间
+                current_time = self.get_current_time()
+                
+                # 获取在线村民
+                online_villagers = self.get_online_villagers()
+                
+                # 获取交易状态
+                trades_received = self.get_trades_received()
+                trades_sent = self.get_trades_sent()
+                
+                # 获取商人价格
+                merchant_prices = self.get_merchant_prices()
+                
+                # 构建决策上下文
+                context = {
+                    'villager': villager_state,
+                    'time': current_time,
+                    'online_villagers': online_villagers,
+                    'trades_received': trades_received,
+                    'trades_sent': trades_sent,
+                    'merchant_prices': merchant_prices,
+                    'decision_history': self.decision_history[-10:]  # 最近10个决策
+                }
+                
+                # 生成决策
+                if self.use_react:
+                    decision = self._make_react_decision(context)
+                else:
+                    decision = self._make_simple_decision(context)
+                
+                if decision:
+                    print(f"[gRPC AI Agent] 决策: {decision}")
+                    
+                    # 执行决策
+                    success, message = self.execute_action(decision)
+                    if success:
+                        print(f"[gRPC AI Agent] ✓ {message}")
+                    else:
+                        print(f"[gRPC AI Agent] ✗ {message}")
+                    
+                    # 记录决策历史
+                    self.decision_history.append({
+                        'timestamp': time.time(),
+                        'decision': decision,
+                        'success': success,
+                        'message': message,
+                        'context': context
+                    })
+                
+                # 等待一段时间再决策
+                time.sleep(10)  # 10秒间隔
+                
+            except Exception as e:
+                print(f"[gRPC AI Agent] 决策循环错误: {e}")
+                time.sleep(5)
+    
+    def _make_simple_decision(self, context):
+        """简单决策逻辑（不依赖GPT）"""
+        villager = context['villager']
+        trades_received = context['trades_received']
+        trades_sent = context['trades_sent']
+        
+        # 优先处理收到的交易
+        if trades_received:
+            trade = trades_received[0]
+            return {
+                'action': 'accept_trade',
+                'trade_id': trade['trade_id']
+            }
+        
+        # 处理已接受的交易确认
+        for trade in trades_sent:
+            if trade['status'] == 'accepted' and not trade['initiator_confirmed']:
+                return {
+                    'action': 'confirm_trade',
+                    'trade_id': trade['trade_id']
+                }
+        
+        # 如果体力低，尝试睡眠
+        if villager['stamina'] < 20:
+            return {'action': 'sleep'}
+        
+        # 如果有资源，尝试生产
+        if villager['inventory']['items'].get('seed', 0) > 0:
+            return {'action': 'produce'}
+        
+        # 如果没钱，尝试出售
+        if villager['inventory']['money'] < 50:
+            if villager['inventory']['items'].get('wheat', 0) > 0:
+                return {
+                    'action': 'sell',
+                    'item': 'wheat',
+                    'quantity': 1
+                }
+        
+        # 默认空闲
+        return {'action': 'idle'}
+    
+    def _make_react_decision(self, context):
+        """ReAct决策逻辑（需要GPT）"""
+        if not self.api_key:
+            print("[gRPC AI Agent] 没有API Key，使用简单决策")
+            return self._make_simple_decision(context)
+        
+        # 这里可以集成GPT的ReAct逻辑
+        # 暂时使用简单决策
+        return self._make_simple_decision(context)
 
 
 def main():

@@ -297,7 +297,10 @@ class VillagerCLI:
             if response.success:
                 print(f"\n✓ 交易请求已发送: {response.trade_id}")
                 print(f"  对方: {target_node}")
-                print(f"  内容: {offer_type} {quantity}x {item} @ {price}\n")
+                print(f"  内容: {offer_type} {quantity}x {item} @ {price}")
+                print(f"\n⏳ 等待 {target_node} 接受或拒绝...")
+                print(f"💡 提示: 对方需要输入 'accept {response.trade_id}' 和 'confirm {response.trade_id}'")
+                print(f"   使用 'mytrades' 查看此交易的状态\n")
             else:
                 print(f"\n✗ {response.message}")
         except Exception as e:
@@ -328,10 +331,23 @@ class VillagerCLI:
                 print(f"  类型: {trade.offer_type}")
                 print(f"  物品: {trade.item} x{trade.quantity}")
                 print(f"  价格: {trade.price}")
-                print(f"  状态: {trade.status}")
+                
+                # 根据状态显示不同的提示
                 if trade.status == 'accepted':
-                    print(f"  我已确认: {'是' if trade.initiator_confirmed else '否'}")
-                    print(f"  对方已确认: {'是' if trade.target_confirmed else '否'}")
+                    print(f"  状态: ✓ 对方已接受（等待双方确认）")
+                    if not trade.initiator_confirmed:
+                        print(f"  💡 操作: confirm {trade.trade_id}")
+                    elif not trade.target_confirmed:
+                        print(f"  💡 等待: 对方确认中...")
+                    else:
+                        print(f"  💡 状态: 双方已确认，交易将自动完成")
+                elif trade.status == 'pending':
+                    print(f"  状态: ⏳ 等待对方接受")
+                    print(f"  💡 操作: 等待对方响应或 cancel {trade.trade_id}")
+                elif trade.status == 'rejected':
+                    print(f"  状态: ✗ 已被拒绝")
+                elif trade.status == 'completed':
+                    print(f"  状态: ✓ 交易完成")
             print("="*50 + "\n")
         except Exception as e:
             print(f"\n✗ 错误: {e}")
@@ -361,7 +377,23 @@ class VillagerCLI:
                 print(f"  类型: {trade.offer_type}")
                 print(f"  物品: {trade.item} x{trade.quantity}")
                 print(f"  价格: {trade.price}")
-                print(f"  状态: {trade.status}")
+                
+                # 根据状态显示不同的提示
+                if trade.status == 'pending':
+                    print(f"  状态: ⏳ 待处理")
+                    print(f"  💡 操作: accept {trade.trade_id} 或 reject {trade.trade_id}")
+                elif trade.status == 'accepted':
+                    print(f"  状态: ✓ 已接受（等待双方确认）")
+                    if not trade.target_confirmed:
+                        print(f"  💡 操作: confirm {trade.trade_id}")
+                    elif not trade.initiator_confirmed:
+                        print(f"  💡 等待: 对方确认中...")
+                    else:
+                        print(f"  💡 状态: 双方已确认，交易将自动完成")
+                elif trade.status == 'rejected':
+                    print(f"  状态: ✗ 已拒绝")
+                elif trade.status == 'completed':
+                    print(f"  状态: ✓ 交易完成")
             print("="*50 + "\n")
         except Exception as e:
             print(f"\n✗ 错误: {e}")
@@ -379,7 +411,10 @@ class VillagerCLI:
             channel.close()
             
             if response.success:
-                print(f"\n✓ {response.message}\n")
+                print(f"\n✓ {response.message}")
+                print(f"💡 提示: 交易已接受，现在需要双方确认")
+                print(f"   使用 'confirm {trade_id}' 确认交易")
+                print(f"   或使用 'cancel {trade_id}' 取消交易\n")
             else:
                 print(f"\n✗ {response.message}\n")
         except Exception as e:
@@ -398,7 +433,9 @@ class VillagerCLI:
             channel.close()
             
             if response.success:
-                print(f"\n✓ {response.message}\n")
+                print(f"\n✓ {response.message}")
+                print(f"💡 交易确认完成！资源已交换")
+                print(f"   使用 'info' 查看最新状态\n")
                 self.display_villager_info()
             else:
                 print(f"\n✗ {response.message}\n")
