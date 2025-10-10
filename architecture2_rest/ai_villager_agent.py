@@ -46,6 +46,9 @@ class AIVillagerAgent:
         # 交易跟踪
         self.sent_trades_tracker = {}  # 跟踪已发送的交易请求
         
+        # 消息跟踪
+        self.sent_messages_tracker = []  # 跟踪最近发送的消息
+        
         print(f"[AI Agent] 初始化完成，连接到村民节点: {villager_port}")
     
     def check_connection(self) -> bool:
@@ -1603,6 +1606,10 @@ Waiting: {action_status.get('waiting_for', [])}
 Messages Received: {len(messages)}
 {chr(10).join([f"- From {msg.get('from', 'Unknown')}: {msg.get('content', '')[:50]}..." for msg in messages[:3]]) if messages else "No messages"}
 
+Recently Sent Messages: {len(self.sent_messages_tracker)}
+{chr(10).join([f"- To {msg['target']}: {msg['content'][:50]}..." for msg in self.sent_messages_tracker[-3:]]) if self.sent_messages_tracker else "No sent messages"}
+⚠️ IMPORTANT: You have already sent the above messages. Don't send duplicate messages!
+
 === TRADES ===
 Trades Received: {len(trades_received)}
 {chr(10).join([f"- Trade {trade.get('trade_id', '')}: {trade.get('from', 'Unknown')} wants to {trade.get('offer_type', '')} {trade.get('item', '')} x{trade.get('quantity', 0)} for {trade.get('price', 0)} gold total ({trade.get('price', 0)//trade.get('quantity', 1)} gold each)" for trade in trades_received[:3]]) if trades_received else "No trade requests"}
@@ -1645,6 +1652,7 @@ Make smart decisions based on the above information:
    - **Status Check**: Check if target villager can trade (not waiting/submitted action)
    - **No Spam**: Don't send duplicate trade requests to the same villager
    - **Negotiation First**: Always send a negotiation message before sending trade request
+   - **No Duplicate Messages**: Check "Recently Sent Messages" above - DON'T send the same/similar messages again!
    - **Fallback**: If P2P trading fails, fall back to merchant trading
    - **Examples**:
      * Farmer: `send node2 "Hi! I have 3x wheat to sell for 21 gold total (7 gold each). This is better than the merchant's buy price of 5 gold each. Would you like to buy?"`
@@ -2126,6 +2134,16 @@ Return JSON decision format."""
                                         target=decision.get('target', 'all'),
                                         content=decision.get('content', 'Hello!'),
                                         type='private')
+            if success:
+                # 记录已发送的消息
+                self.sent_messages_tracker.append({
+                    'target': decision.get('target'),
+                    'content': decision.get('content'),
+                    'timestamp': time.time()
+                })
+                # 只保留最近10条消息
+                if len(self.sent_messages_tracker) > 10:
+                    self.sent_messages_tracker = self.sent_messages_tracker[-10:]
         elif action == "accept":
             trade_id = decision.get('trade_id')
             if trade_id:
