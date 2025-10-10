@@ -87,14 +87,12 @@ class AIVillagerAgent:
             print(f"[AI Agent] ✗ 村民创建异常: {e}")
             return False
     
-    def get_villager_info(self):
-        """获取村民信息"""
+    def get_villager_status(self):
+        """获取村民状态"""
         try:
             response = requests.get(f"{self.villager_url}/villager", timeout=5)
             if response.status_code == 200:
-                result = response.json()
-                # REST API直接返回村民数据，不是包装在success/villager中
-                return result
+                return response.json()
             return None
         except:
             return None
@@ -1079,7 +1077,7 @@ QUANTITY HEURISTIC:
         
         try:
             # 获取当前状态
-            villager = self.get_villager_info()
+            villager = self.get_villager_status()
             if not villager:
                 print("[AI Agent] ✗ 无法获取村民信息")
                 return False
@@ -1121,7 +1119,7 @@ QUANTITY HEURISTIC:
         print("[AI Agent] 启动交互模式")
         
         # 检查村民是否已创建
-        villager = self.get_villager_info()
+        villager = self.get_villager_status()
         if not villager:
             print("[AI Agent] 村民未创建，请先创建村民")
             name = input("村民名字: ")
@@ -1209,7 +1207,7 @@ QUANTITY HEURISTIC:
     
     def _show_status(self):
         """显示状态"""
-        villager = self.get_villager_info()
+        villager = self.get_villager_status()
         if not villager:
             print("无法获取村民信息")
             return
