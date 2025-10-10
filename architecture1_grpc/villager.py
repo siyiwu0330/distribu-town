@@ -581,29 +581,35 @@ def serve(port, node_id, coordinator_addr='localhost:50051'):
     
     app = Flask(__name__)
     
-    @app.route('/messages/receive', methods=['POST'])
-    def receive_message():
-        """接收消息的HTTP端点"""
-        try:
-            data = request.json
-            message = {
-                'message_id': data.get('message_id'),
-                'from': data.get('from'),
-                'to': data.get('to'),
-                'content': data.get('content'),
-                'type': data.get('type'),
-                'timestamp': data.get('timestamp'),
-                'is_read': False
-            }
-            
-            # 添加到消息列表
-            villager_service.messages.append(message)
-            print(f"[Villager-{node_id}] 收到消息: {message['from']} -> {message['to']}: {message['content']}")
-            
-            return jsonify({'success': True, 'message': '消息接收成功'})
-        except Exception as e:
-            print(f"[Villager-{node_id}] 接收消息失败: {e}")
-            return jsonify({'success': False, 'message': str(e)}), 500
+    # 创建一个闭包来访问villager_service
+    def make_receive_message(service, nid):
+        def receive_message():
+            """接收消息的HTTP端点"""
+            try:
+                data = request.json
+                message = {
+                    'message_id': data.get('message_id'),
+                    'from': data.get('from'),
+                    'to': data.get('to'),
+                    'content': data.get('content'),
+                    'type': data.get('type'),
+                    'timestamp': data.get('timestamp'),
+                    'is_read': False
+                }
+                
+                # 添加到消息列表
+                service.messages.append(message)
+                print(f"[Villager-{nid}] 收到消息: {message['from']} -> {message['to']}: {message['content']}")
+                
+                return jsonify({'success': True, 'message': '消息接收成功'})
+            except Exception as e:
+                print(f"[Villager-{nid}] 接收消息失败: {e}")
+                import traceback
+                traceback.print_exc()
+                return jsonify({'success': False, 'message': str(e)}), 500
+        return receive_message
+    
+    app.route('/messages/receive', methods=['POST'])(make_receive_message(villager_service, node_id))
     
     @app.route('/health', methods=['GET'])
     def health_check():
