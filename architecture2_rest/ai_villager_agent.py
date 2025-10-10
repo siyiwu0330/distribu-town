@@ -899,16 +899,37 @@ class AIVillagerAgent:
             if trades_received:
                 print(f"[AI Agent DEBUG] 收到的交易请求详情:")
                 for trade in trades_received:
-                    print(f"  {trade.get('trade_id')}: {trade.get('from')} 想{trade.get('offer_type')} {trade.get('quantity')}x {trade.get('item')} for {trade.get('price')} gold")
+                    # 获取发起方名字
+                    initiator_id = trade.get('initiator_id', 'Unknown')
+                    initiator_name = initiator_id  # 默认使用node_id
+                    
+                    # 尝试从在线村民列表中获取名字
+                    villagers = context.get('villagers', [])
+                    for villager in villagers:
+                        if villager.get('node_id') == initiator_id:
+                            initiator_name = villager.get('name', initiator_id)
+                            break
+                    
+                    print(f"  {trade.get('trade_id')}: {initiator_name} 想{trade.get('offer_type')} {trade.get('quantity')}x {trade.get('item')} for {trade.get('price')} gold")
             
             trades_sent = context.get('trades_sent', [])
             if trades_sent:
                 print(f"[AI Agent DEBUG] 发送的交易请求详情:")
                 for trade in trades_sent:
-                    target = trade.get('target_id', 'unknown')
+                    # 获取目标方名字
+                    target_id = trade.get('target_id', 'unknown')
+                    target_name = target_id  # 默认使用node_id
+                    
+                    # 尝试从在线村民列表中获取名字
+                    villagers = context.get('villagers', [])
+                    for villager in villagers:
+                        if villager.get('node_id') == target_id:
+                            target_name = villager.get('name', target_id)
+                            break
+                    
                     offer_type = trade.get('offer_type', 'unknown')
                     status = trade.get('status', 'pending')
-                    print(f"  {trade.get('trade_id')}: 发送给 {target} - {offer_type} {trade.get('quantity')}x {trade.get('item')} for {trade.get('price')} gold (状态: {status})")
+                    print(f"  {trade.get('trade_id')}: 发送给 {target_name} - {offer_type} {trade.get('quantity')}x {trade.get('item')} for {trade.get('price')} gold (状态: {status})")
             
             # 调用GPT API
             response = openai.ChatCompletion.create(
