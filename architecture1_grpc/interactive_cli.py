@@ -360,7 +360,7 @@ class VillagerCLI:
             channel, stub = self._get_merchant_stub()
             response = stub.ListTrades(town_pb2.ListTradesRequest(
                 node_id=my_node_id,
-                type='pending'
+                type='received'
             ))
             channel.close()
             
@@ -434,9 +434,34 @@ class VillagerCLI:
             
             if response.success:
                 print(f"\n✓ {response.message}")
-                print(f"💡 交易确认完成！资源已交换")
-                print(f"   使用 'info' 查看最新状态\n")
-                self.display_villager_info()
+                
+                # 检查交易是否真正完成（双方都已确认）
+                try:
+                    # 重新获取交易状态
+                    channel, stub = self._get_merchant_stub()
+                    trade_response = stub.ListTrades(town_pb2.ListTradesRequest(
+                        node_id=my_node_id,
+                        type='sent'
+                    ))
+                    channel.close()
+                    
+                    # 查找当前交易
+                    current_trade = None
+                    for trade in trade_response.trades:
+                        if trade.trade_id == trade_id:
+                            current_trade = trade
+                            break
+                    
+                    if current_trade and current_trade.status == 'completed':
+                        print(f"💡 交易确认完成！资源已交换")
+                        print(f"   使用 'info' 查看最新状态\n")
+                        self.display_villager_info()
+                    else:
+                        print(f"💡 确认成功，等待对方确认")
+                        print(f"   使用 'mytrades' 查看交易状态\n")
+                except:
+                    print(f"💡 确认成功，等待对方确认")
+                    print(f"   使用 'mytrades' 查看交易状态\n")
             else:
                 print(f"\n✗ {response.message}\n")
         except Exception as e:

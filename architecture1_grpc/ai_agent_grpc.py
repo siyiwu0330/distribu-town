@@ -1,7 +1,7 @@
 #!/usr/bin/env python3
 """
 AI Agent启动器 - gRPC版本
-使用适配层桥接gRPC和REST API，从而复用REST版本的AI Agent代码
+完全复制REST版本的AI Agent功能，使用gRPC适配层
 """
 
 import sys
@@ -9,6 +9,9 @@ import os
 import argparse
 import threading
 import time
+import json
+import openai
+from datetime import datetime
 
 # 添加路径
 sys.path.insert(0, os.path.dirname(__file__))
@@ -22,280 +25,137 @@ from ai_villager_agent import AIVillagerAgent
 
 
 class GRPCAIAgent(AIVillagerAgent):
-    """
-    gRPC版本的AI Agent
-    继承REST版本的AIVillagerAgent，但使用gRPC适配层替换requests调用
-    """
+    """gRPC版本的AI Agent，继承REST版本的所有功能"""
     
-    def __init__(self, villager_port: int, coordinator_port: int = 50051, merchant_port: int = 50052,
-                 api_key: str = None, model: str = "gpt-4o-mini", use_react: bool = True):
+    def __init__(self, villager_port: int, coordinator_port: int = 50051, merchant_port: int = 50052, 
+                 api_key: str = None, model: str = "gpt-4", use_react: bool = False):
+        # 初始化gRPC适配层
+        self.grpc_adapter = GRPCAdapter(
+            coordinator_port=coordinator_port,
+            merchant_port=merchant_port,
+            villager_port=villager_port
+        )
         
-        # 构造地址
-        villager_address = f"localhost:{villager_port}"
-        coordinator_address = f"localhost:{coordinator_port}"
-        merchant_address = f"localhost:{merchant_port}"
+        # 调用父类初始化，但使用gRPC适配层
+        super().__init__(
+            villager_port=villager_port,
+            coordinator_port=coordinator_port,
+            merchant_port=merchant_port,
+            api_key=api_key,
+            model=model,
+            use_react=use_react
+        )
         
-        # 创建gRPC适配器
-        self.grpc_adapter = GRPCAdapter(villager_address, coordinator_address, merchant_address)
+        print("[gRPC AI Agent] 使用gRPC适配层")
         
-        # 初始化父类（REST版本）
-        # 注意：我们传入的端口会被转换为URL，但我们会拦截所有requests调用
-        super().__init__(villager_port, coordinator_port, merchant_port, api_key, model, use_react)
-        
-        # 覆盖地址信息
-        self.villager_address = villager_address
-        self.coordinator_address = coordinator_address  
-        self.merchant_address = merchant_address
-        
-        print(f"[gRPC AI Agent] 使用gRPC适配层")
+        # Monkey patch所有HTTP请求为gRPC调用
+        self._patch_requests()
     
-    # ========== 覆盖REST API调用方法 ==========
+    def _patch_requests(self):
+        """将所有HTTP请求替换为gRPC调用"""
+        # 保存原始方法（只保存存在的方法）
+        self._original_get_villager_status = super().get_villager_status
+        self._original_get_current_time = super().get_current_time
+        self._original_get_action_status = super().get_action_status
+        self._original_get_merchant_prices = super().get_merchant_prices
+        self._original_get_online_villagers = super().get_online_villagers
+        self._original_get_messages = super().get_messages
+        self._original_get_trades_received = super().get_trades_received
+        self._original_get_trades_sent = super().get_trades_sent
+        self._original_execute_action = super().execute_action
+        self._original_check_connection = super().check_connection
+        self._original_create_villager = super().create_villager
+        self._original_buy_from_merchant = super().buy_from_merchant
+        self._original_sell_to_merchant = super().sell_to_merchant
+        self._original_send_message = super().send_message
+        self._original_create_trade_request = super().create_trade_request
+        self._original_accept_trade_request = super().accept_trade_request
+        self._original_reject_trade_request = super().reject_trade_request
+        self._original_confirm_trade_request = super().confirm_trade_request
+        self._original_cancel_trade_request = super().cancel_trade_request
     
     def check_connection(self) -> bool:
-        """检查连接（使用gRPC）"""
-        try:
-            result = self.grpc_adapter.get_villager()
-            return result['status_code'] == 200 or result['status_code'] == 400  # 400表示未初始化，但连接正常
-        except:
-            return False
+        """检查连接"""
+        return self.grpc_adapter.check_villager_connection()
     
-    def get_villager_status(self):
-        """获取村民状态（使用gRPC）"""
-        try:
-            result = self.grpc_adapter.get_villager()
-            if result['status_code'] == 200:
-                # 补充node_id
-                villager_data = result['json']
-                # 从coordinator获取node_id
-                nodes_result = self.grpc_adapter.get_nodes()
-                if nodes_result['status_code'] == 200:
-                    for node in nodes_result['json']['nodes']:
-                        if node['address'] == self.villager_address:
-                            villager_data['node_id'] = node['node_id']
-                            break
-                if 'node_id' not in villager_data:
-                    villager_data['node_id'] = f"node{self.villager_port}"
-                return villager_data
-            return None
-        except Exception as e:
-            print(f"[gRPC AI Agent] 获取村民状态失败: {e}")
-            return None
+    def get_villager_status(self) -> dict:
+        """获取村民状态"""
+        return self.grpc_adapter.get_villager_status()
     
     def get_current_time(self) -> str:
-        """获取当前时间（使用gRPC）"""
-        try:
-            result = self.grpc_adapter.get_time()
-            if result['status_code'] == 200:
-                time_data = result['json']
-                return f"Day {time_data['day']} - {time_data['time_of_day']}"
-            return "Unknown"
-        except Exception as e:
-            print(f"[gRPC AI Agent] 获取时间失败: {e}")
-            return "Unknown"
+        """获取当前时间"""
+        return self.grpc_adapter.get_current_time()
     
-    def get_action_status(self):
-        """获取行动状态（gRPC版本没有action系统，返回None）"""
-        return None
+    def get_action_status(self) -> dict:
+        """获取行动提交状态"""
+        return self.grpc_adapter.get_action_status()
     
-    def get_merchant_prices(self):
-        """获取商人价格（使用gRPC）"""
-        try:
-            result = self.grpc_adapter.get_prices()
-            if result['status_code'] == 200:
-                return result['json']
-            return None
-        except Exception as e:
-            print(f"[gRPC AI Agent] 获取商人价格失败: {e}")
-            return None
+    def get_merchant_prices(self) -> dict:
+        """获取商人价格"""
+        return self.grpc_adapter.get_merchant_prices()
     
-    def get_trades_received(self):
-        """获取收到的交易请求（使用gRPC）"""
-        try:
-            villager_state = self.get_villager_status() or {}
-            my_node_id = villager_state.get('node_id')
-            
-            if not my_node_id:
-                return []
-            
-            result = self.grpc_adapter.list_trades(my_node_id, 'pending')
-            if result['status_code'] == 200:
-                return result['json'].get('trades', [])
-            return []
-        except Exception as e:
-            print(f"[gRPC AI Agent] 获取交易请求失败: {e}")
-            return []
+    def get_online_villagers(self) -> list:
+        """获取在线村民"""
+        return self.grpc_adapter.get_online_villagers()
     
-    def get_trades_sent(self):
-        """获取发送的交易请求（使用gRPC）"""
-        try:
-            villager_state = self.get_villager_status() or {}
-            my_node_id = villager_state.get('node_id')
-            
-            if not my_node_id:
-                return []
-            
-            result = self.grpc_adapter.list_trades(my_node_id, 'sent')
-            if result['status_code'] == 200:
-                return result['json'].get('trades', [])
-            return []
-        except Exception as e:
-            print(f"[gRPC AI Agent] 获取发送交易失败: {e}")
-            return []
+    def get_messages(self) -> list:
+        """获取消息"""
+        return self.grpc_adapter.get_messages()
     
-    def get_messages(self):
-        """获取消息列表（gRPC版本没有消息系统）"""
-        return []
+    def get_trades_received(self) -> list:
+        """获取收到的交易请求"""
+        return self.grpc_adapter.get_trades_received()
     
-    def get_online_villagers(self):
-        """获取在线村民列表（使用gRPC）"""
-        try:
-            result = self.grpc_adapter.get_nodes()
-            if result['status_code'] != 200:
-                return []
-            
-            villagers = []
-            for node in result['json']['nodes']:
-                if node['node_type'] == 'villager':
-                    # 获取详细信息
-                    try:
-                        adapter = GRPCAdapter(node['address'], self.coordinator_address, self.merchant_address)
-                        v_result = adapter.get_villager()
-                        if v_result['status_code'] == 200:
-                            v_data = v_result['json']
-                            villagers.append({
-                                'node_id': node['node_id'],
-                                'name': v_data.get('name', node['node_id']),
-                                'occupation': v_data.get('occupation', 'unknown'),
-                                'has_submitted_action': False,
-                                'stamina': v_data.get('stamina', 0),
-                                'inventory': v_data.get('inventory', {}),
-                                'address': node['address']
-                            })
-                        else:
-                            villagers.append({
-                                'node_id': node['node_id'],
-                                'name': node['node_id'],
-                                'occupation': 'unknown',
-                                'has_submitted_action': False,
-                                'stamina': 0,
-                                'inventory': {},
-                                'address': node['address']
-                            })
-                    except:
-                        villagers.append({
-                            'node_id': node['node_id'],
-                            'name': node['node_id'],
-                            'occupation': 'unknown',
-                            'has_submitted_action': False,
-                            'stamina': 0,
-                            'inventory': {},
-                            'address': node['address']
-                        })
-            
-            return villagers
-        except Exception as e:
-            print(f"[gRPC AI Agent] 获取在线村民失败: {e}")
-            return []
+    def get_trades_sent(self) -> list:
+        """获取发送的交易请求"""
+        return self.grpc_adapter.get_trades_sent()
     
-    # ========== 覆盖行动执行方法 ==========
+    def execute_action(self, action: str, **kwargs) -> bool:
+        """执行行动"""
+        return self.grpc_adapter.execute_action(action, **kwargs)
     
-    def execute_action(self, action_dict):
-        """执行行动（覆盖以使用gRPC）"""
-        action = action_dict.get('action')
-        
-        if action == 'produce':
-            result = self.grpc_adapter.produce()
-            return result['json'].get('success', False), result['json'].get('message', '')
-        
-        elif action == 'buy':
-            result = self.grpc_adapter.trade_merchant('buy', action_dict['item'], action_dict['quantity'])
-            return result['json'].get('success', False), result['json'].get('message', '')
-        
-        elif action == 'sell':
-            result = self.grpc_adapter.trade_merchant('sell', action_dict['item'], action_dict['quantity'])
-            return result['json'].get('success', False), result['json'].get('message', '')
-        
-        elif action == 'sleep':
-            result = self.grpc_adapter.sleep()
-            return result['json'].get('success', False), result['json'].get('message', '')
-        
-        elif action == 'trade':
-            # 村民间交易
-            my_state = self.get_villager_status()
-            if not my_state:
-                return False, "无法获取自己的状态"
-            
-            my_node_id = my_state.get('node_id')
-            target_id = action_dict['target']
-            
-            # 获取目标地址
-            nodes = self.grpc_adapter.get_nodes()
-            target_address = None
-            for node in nodes['json']['nodes']:
-                if node['node_id'] == target_id:
-                    target_address = node['address']
-                    break
-            
-            if not target_address:
-                return False, f"找不到目标节点: {target_id}"
-            
-            result = self.grpc_adapter.create_trade({
-                'initiator_id': my_node_id,
-                'initiator_address': self.villager_address,
-                'target_id': target_id,
-                'target_address': target_address,
-                'offer_type': action_dict['offer_type'],
-                'item': action_dict['item'],
-                'quantity': action_dict['quantity'],
-                'price': action_dict['price']
-            })
-            return result['json'].get('success', False), result['json'].get('message', '')
-        
-        elif action == 'accept_trade':
-            my_state = self.get_villager_status()
-            my_node_id = my_state.get('node_id') if my_state else None
-            if not my_node_id:
-                return False, "无法获取node_id"
-            
-            result = self.grpc_adapter.accept_trade(action_dict['trade_id'], my_node_id)
-            return result['json'].get('success', False), result['json'].get('message', '')
-        
-        elif action == 'confirm_trade':
-            my_state = self.get_villager_status()
-            my_node_id = my_state.get('node_id') if my_state else None
-            if not my_node_id:
-                return False, "无法获取node_id"
-            
-            result = self.grpc_adapter.confirm_trade(action_dict['trade_id'], my_node_id)
-            return result['json'].get('success', False), result['json'].get('message', '')
-        
-        elif action == 'reject_trade':
-            my_state = self.get_villager_status()
-            my_node_id = my_state.get('node_id') if my_state else None
-            if not my_node_id:
-                return False, "无法获取node_id"
-            
-            result = self.grpc_adapter.reject_trade(action_dict['trade_id'], my_node_id)
-            return result['json'].get('success', False), result['json'].get('message', '')
-        
-        elif action == 'cancel_trade':
-            my_state = self.get_villager_status()
-            my_node_id = my_state.get('node_id') if my_state else None
-            if not my_node_id:
-                return False, "无法获取node_id"
-            
-            result = self.grpc_adapter.cancel_trade(action_dict['trade_id'], my_node_id)
-            return result['json'].get('success', False), result['json'].get('message', '')
-        
-        elif action in ['send', 'idle', 'wait', 'eat']:
-            # gRPC版本不支持这些action
-            return True, f"Action {action} (not supported in gRPC, simulated)"
-        
-        else:
-            return False, f"Unknown action: {action}"
+    def create_villager(self, name: str, occupation: str, gender: str, personality: str) -> bool:
+        """创建村民"""
+        return self.grpc_adapter.create_villager(name, occupation, gender, personality)
+    
+    def submit_action(self, action: str, **kwargs) -> bool:
+        """提交行动（gRPC版本直接执行）"""
+        return self.execute_action(action, **kwargs)
+    
+    def buy_from_merchant(self, item: str, quantity: int) -> bool:
+        """从商人购买"""
+        return self.grpc_adapter.buy_from_merchant(item, quantity)
+    
+    def sell_to_merchant(self, item: str, quantity: int) -> bool:
+        """向商人出售"""
+        return self.grpc_adapter.sell_to_merchant(item, quantity)
+    
+    def send_message(self, target: str, content: str) -> bool:
+        """发送消息"""
+        return self.grpc_adapter.send_message(target, content)
+    
+    def create_trade_request(self, target: str, offer_type: str, item: str, quantity: int, price: int) -> bool:
+        """创建交易请求"""
+        return self.grpc_adapter.create_trade_request(target, offer_type, item, quantity, price)
+    
+    def accept_trade_request(self, trade_id: str) -> bool:
+        """接受交易请求"""
+        return self.grpc_adapter.accept_trade_request(trade_id)
+    
+    def reject_trade_request(self, trade_id: str) -> bool:
+        """拒绝交易请求"""
+        return self.grpc_adapter.reject_trade_request(trade_id)
+    
+    def confirm_trade_request(self, trade_id: str) -> bool:
+        """确认交易请求"""
+        return self.grpc_adapter.confirm_trade_request(trade_id)
+    
+    def cancel_trade_request(self, trade_id: str) -> bool:
+        """取消交易请求"""
+        return self.grpc_adapter.cancel_trade_request(trade_id)
     
     def start(self):
-        """启动AI Agent"""
+        """启动AI Agent（重写父类方法）"""
         if not self.api_key:
             print("⚠ 警告: 没有提供OpenAI API Key，AI Agent将以模拟模式运行")
             print("   设置环境变量: export OPENAI_API_KEY=your_key")
@@ -307,196 +167,84 @@ class GRPCAIAgent(AIVillagerAgent):
         print("   按 Ctrl+C 停止")
         print("")
         
-        # 启动决策线程
-        self.decision_thread = threading.Thread(target=self._decision_loop, daemon=True)
-        self.decision_thread.start()
+        # 使用父类的决策循环
+        self.start_auto_decision_loop(interval=30)
     
     def stop(self):
         """停止AI Agent"""
-        self.running = False
-        if self.decision_thread:
-            self.decision_thread.join(timeout=2)
+        self.stop_auto_decision_loop()
         print("[gRPC AI Agent] 已停止")
-    
-    def _decision_loop(self):
-        """决策循环"""
-        while self.running:
-            try:
-                # 获取当前状态
-                villager_state = self.get_villager_status()
-                if not villager_state:
-                    print("[gRPC AI Agent] 无法获取村民状态，等待重试...")
-                    time.sleep(5)
-                    continue
-                
-                # 获取当前时间
-                current_time = self.get_current_time()
-                
-                # 获取在线村民
-                online_villagers = self.get_online_villagers()
-                
-                # 获取交易状态
-                trades_received = self.get_trades_received()
-                trades_sent = self.get_trades_sent()
-                
-                # 获取商人价格
-                merchant_prices = self.get_merchant_prices()
-                
-                # 构建决策上下文
-                context = {
-                    'villager': villager_state,
-                    'time': current_time,
-                    'online_villagers': online_villagers,
-                    'trades_received': trades_received,
-                    'trades_sent': trades_sent,
-                    'merchant_prices': merchant_prices,
-                    'decision_history': self.decision_history[-10:]  # 最近10个决策
-                }
-                
-                # 生成决策
-                if self.use_react:
-                    decision = self._make_react_decision(context)
-                else:
-                    decision = self._make_simple_decision(context)
-                
-                if decision:
-                    print(f"[gRPC AI Agent] 决策: {decision}")
-                    
-                    # 执行决策
-                    success, message = self.execute_action(decision)
-                    if success:
-                        print(f"[gRPC AI Agent] ✓ {message}")
-                    else:
-                        print(f"[gRPC AI Agent] ✗ {message}")
-                    
-                    # 记录决策历史
-                    self.decision_history.append({
-                        'timestamp': time.time(),
-                        'decision': decision,
-                        'success': success,
-                        'message': message,
-                        'context': context
-                    })
-                
-                # 等待一段时间再决策
-                time.sleep(10)  # 10秒间隔
-                
-            except Exception as e:
-                print(f"[gRPC AI Agent] 决策循环错误: {e}")
-                time.sleep(5)
-    
-    def _make_simple_decision(self, context):
-        """简单决策逻辑（不依赖GPT）"""
-        villager = context['villager']
-        trades_received = context['trades_received']
-        trades_sent = context['trades_sent']
-        
-        # 优先处理收到的交易
-        if trades_received:
-            trade = trades_received[0]
-            return {
-                'action': 'accept_trade',
-                'trade_id': trade['trade_id']
-            }
-        
-        # 处理已接受的交易确认
-        for trade in trades_sent:
-            if trade['status'] == 'accepted' and not trade['initiator_confirmed']:
-                return {
-                    'action': 'confirm_trade',
-                    'trade_id': trade['trade_id']
-                }
-        
-        # 如果体力低，尝试睡眠
-        if villager['stamina'] < 20:
-            return {'action': 'sleep'}
-        
-        # 如果有资源，尝试生产
-        if villager['inventory']['items'].get('seed', 0) > 0:
-            return {'action': 'produce'}
-        
-        # 如果没钱，尝试出售
-        if villager['inventory']['money'] < 50:
-            if villager['inventory']['items'].get('wheat', 0) > 0:
-                return {
-                    'action': 'sell',
-                    'item': 'wheat',
-                    'quantity': 1
-                }
-        
-        # 默认空闲
-        return {'action': 'idle'}
-    
-    def _make_react_decision(self, context):
-        """ReAct决策逻辑（需要GPT）"""
-        if not self.api_key:
-            print("[gRPC AI Agent] 没有API Key，使用简单决策")
-            return self._make_simple_decision(context)
-        
-        # 这里可以集成GPT的ReAct逻辑
-        # 暂时使用简单决策
-        return self._make_simple_decision(context)
 
 
 def main():
     parser = argparse.ArgumentParser(description='AI村民代理 (gRPC版本)')
     parser.add_argument('--port', type=int, required=True, help='村民节点端口')
     parser.add_argument('--name', type=str, required=True, help='村民名字')
-    parser.add_argument('--occupation', type=str, required=True, help='职业 (farmer/carpenter/chef)')
-    parser.add_argument('--gender', type=str, required=True, help='性别 (male/female)')
-    parser.add_argument('--personality', type=str, required=True, help='性格描述')
+    parser.add_argument('--occupation', type=str, required=True, help='村民职业')
+    parser.add_argument('--gender', type=str, required=True, help='村民性别')
+    parser.add_argument('--personality', type=str, required=True, help='村民性格')
     parser.add_argument('--api-key', type=str, help='OpenAI API Key')
-    parser.add_argument('--model', type=str, default='gpt-4o-mini', help='GPT模型')
-    parser.add_argument('--coordinator', type=int, default=50051, help='协调器端口')
-    parser.add_argument('--merchant', type=int, default=50052, help='商人端口')
+    parser.add_argument('--model', type=str, default='gpt-4', help='OpenAI模型')
+    parser.add_argument('--use-react', action='store_true', help='使用ReAct模式')
     
     args = parser.parse_args()
+    
+    # 获取API Key
+    api_key = args.api_key or os.getenv('OPENAI_API_KEY')
+    
+    print("="*70)
+    print("  创建AI村民:", args.name)
+    print("="*70)
+    print()
     
     # 创建AI Agent
     agent = GRPCAIAgent(
         villager_port=args.port,
-        coordinator_port=args.coordinator,
-        merchant_port=args.merchant,
-        api_key=args.api_key or os.getenv('OPENAI_API_KEY'),
+        api_key=api_key,
         model=args.model,
-        use_react=True
+        use_react=args.use_react
     )
     
-    # 创建村民
-    print(f"\n{'='*70}")
-    print(f"  创建AI村民: {args.name}")
-    print(f"{'='*70}\n")
-    
-    result = agent.grpc_adapter.create_villager({
-        'name': args.name,
-        'occupation': args.occupation,
-        'gender': args.gender,
-        'personality': args.personality
-    })
-    
-    if result['status_code'] != 200:
-        print(f"✗ 创建村民失败: {result['json'].get('message')}")
+    # 检查连接
+    if not agent.check_connection():
+        print("✗ 无法连接到村民节点，请确保节点已启动")
         return
     
-    print(f"✓ 村民创建成功")
+    # 创建村民
+    if agent.create_villager(args.name, args.occupation, args.gender, args.personality):
+        print("✓ 村民创建成功")
+    else:
+        print("✗ 村民创建失败")
+        return
+    
+    # 获取村民信息
+    villager_info = agent.get_villager_status()
+    if villager_info:
+        agent.villager_name = villager_info.get('name', args.name)
+        agent.villager_occupation = villager_info.get('occupation', args.occupation)
+        print(f"✓ 村民信息: {agent.villager_name} ({agent.villager_occupation})")
+    
+    print()
+    print("="*70)
+    print("  启动AI Agent托管")
+    print("="*70)
+    print()
     
     # 启动AI Agent
-    print(f"\n{'='*70}")
-    print(f"  启动AI Agent托管")
-    print(f"{'='*70}\n")
-    
-    agent.start()
-    
-    # 保持运行
     try:
+        agent.start()
+        
+        # 保持运行
         while agent.running:
-            import time
             time.sleep(1)
+            
     except KeyboardInterrupt:
-        print("\n\n停止AI Agent...")
+        print("\n[gRPC AI Agent] 收到停止信号...")
+        agent.stop()
+    except Exception as e:
+        print(f"[gRPC AI Agent] 运行异常: {e}")
         agent.stop()
 
 
-if __name__ == '__main__':
+if __name__ == "__main__":
     main()
-
