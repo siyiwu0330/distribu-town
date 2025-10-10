@@ -546,19 +546,19 @@ class AIVillagerAgent:
             
             # 执行交易决策
             if should_accept:
-                print(f"[AI Agent] {self.villager_name} 准备交易: {reason}")
+                print(f"[AI Agent] {self.villager_name} 接受交易: {reason}")
                 try:
-                    success = self.execute_action("prepare_trade", trade_id=trade_id)
+                    success = self.execute_action("accept_trade", trade_id=trade_id)
                     if success:
-                        print(f"[AI Agent] ✓ 交易准备成功")
-                        # 发送消息通知发起方交易已准备就绪
-                        message = f"交易 {trade_id} 已准备就绪！请使用 'commit {trade_id}' 来提交交易。"
+                        print(f"[AI Agent] ✓ 交易接受成功")
+                        # 发送消息通知发起方交易已接受
+                        message = f"交易 {trade_id} 已接受！请使用 'confirm {trade_id}' 来确认交易。"
                         self.execute_action("send_message", target=from_villager, content=message)
-                        print(f"[AI Agent] {self.villager_name} 已通知 {from_villager} 交易准备就绪")
+                        print(f"[AI Agent] {self.villager_name} 已通知 {from_villager} 交易已接受")
                     else:
-                        print(f"[AI Agent] ✗ 交易准备失败")
+                        print(f"[AI Agent] ✗ 交易接受失败")
                 except Exception as e:
-                    print(f"[AI Agent] ✗ 交易准备异常: {e}")
+                    print(f"[AI Agent] ✗ 交易接受异常: {e}")
             else:
                 print(f"[AI Agent] {self.villager_name} 拒绝交易: {reason}")
                 try:
@@ -576,10 +576,10 @@ class AIVillagerAgent:
             trade_id = trade.get('trade_id', '')
             status = trade.get('status', 'pending')
             
-            if status == 'prepared':
-                print(f"[AI Agent] {self.villager_name} 发现已准备的交易 {trade_id}，尝试提交...")
+            if status == 'accepted':
+                print(f"[AI Agent] {self.villager_name} 发现已接受的交易 {trade_id}，尝试确认...")
                 try:
-                    result = self.execute_action("commit_trade", trade_id=trade_id)
+                    result = self.execute_action("confirm_trade", trade_id=trade_id)
                     if isinstance(result, tuple):
                         success, error_message = result
                     else:
@@ -1781,13 +1781,13 @@ Return JSON decision format."""
                                 "command": action_line,
                                 "trade_id": trade_id
                             }
-                        elif action == "commit" and len(parts) >= 2:
-                            # 格式: commit trade_1 或 commit 1
+                        elif action == "confirm" and len(parts) >= 2:
+                            # 格式: confirm trade_1 或 confirm 1
                             trade_id = parts[1]
                             if not trade_id.startswith('trade_'):
                                 trade_id = f"trade_{trade_id}"
                             return {
-                                "action": "commit",
+                                "action": "confirm",
                                 "reason": reason,
                                 "command": action_line,
                                 "trade_id": trade_id
@@ -1998,7 +1998,7 @@ Return JSON decision format."""
             print(f"[AI Agent] {self.villager_name} 已经提交了行动，只能执行非推进时间的行动...")
             
             # 定义不允许的行动（这些会推进时间）
-            forbidden_actions = ['produce', 'sleep', 'idle', 'buy', 'sell']
+            forbidden_actions = ['produce', 'sleep', 'idle']
             
             if action in forbidden_actions:
                 print(f"[AI Agent] ⚠️ 已提交行动，不能执行 {action}，改为处理消息和交易")
