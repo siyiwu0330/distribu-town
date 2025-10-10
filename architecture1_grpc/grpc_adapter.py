@@ -192,13 +192,43 @@ class GRPCAdapter:
     
     def get_messages(self) -> List[Dict]:
         """获取消息"""
-        # gRPC版本暂时不支持消息系统
-        return []
+        try:
+            channel, stub = self._get_villager_stub()
+            response = stub.GetMessages(town_pb2.GetMessagesRequest(
+                node_id=self.node_id
+            ))
+            channel.close()
+            
+            messages = []
+            for msg in response.messages:
+                messages.append({
+                    'message_id': msg.message_id,
+                    'from': msg.from_,
+                    'to': msg.to,
+                    'content': msg.content,
+                    'type': msg.type,
+                    'timestamp': msg.timestamp,
+                    'is_read': msg.is_read
+                })
+            return messages
+        except Exception as e:
+            print(f"[gRPC Adapter] 获取消息失败: {e}")
+            return []
     
     def send_message(self, target: str, content: str) -> bool:
         """发送消息"""
-        # gRPC版本暂时不支持消息系统
-        return False
+        try:
+            channel, stub = self._get_villager_stub()
+            response = stub.SendMessage(town_pb2.SendMessageRequest(
+                target=target,
+                content=content,
+                type='private'
+            ))
+            channel.close()
+            return response.success
+        except Exception as e:
+            print(f"[gRPC Adapter] 发送消息失败: {e}")
+            return False
     
     # ========== 交易系统 ==========
     

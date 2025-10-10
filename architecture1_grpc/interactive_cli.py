@@ -583,7 +583,21 @@ class VillagerCLI:
         
         for msg in messages:
             status = "✓" if msg['is_read'] else "●"
-            print(f"\n{status} [{msg['message_id']}]")
+            
+            # 格式化时间戳
+            import datetime
+            timestamp = msg['timestamp']
+            if timestamp:
+                try:
+                    # 将时间戳转换为可读格式
+                    dt = datetime.datetime.fromtimestamp(timestamp)
+                    time_str = dt.strftime("%Y-%m-%d %H:%M:%S")
+                except:
+                    time_str = f"时间戳: {timestamp}"
+            else:
+                time_str = "未知时间"
+            
+            print(f"\n{status} [{msg['message_id']}] - {time_str}")
             print(f"  来自: {msg['from']}")
             print(f"  内容: {msg['content']}")
             if msg['type'] == 'private':
