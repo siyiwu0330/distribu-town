@@ -182,9 +182,9 @@ class AIVillagerAgent:
                                 })
                             else:
                                 # 如果无法获取详细状态，使用基本信息
-                        villagers.append({
-                            'node_id': node['node_id'],
-                            'name': node.get('name', node['node_id']),
+                                villagers.append({
+                                    'node_id': node['node_id'],
+                                    'name': node.get('name', node['node_id']),
                                     'occupation': node.get('occupation', 'unknown'),
                                     'has_submitted_action': False,
                                     'stamina': 0,
@@ -201,7 +201,7 @@ class AIVillagerAgent:
                                 'stamina': 0,
                                 'inventory': {},
                                 'address': node['address']
-                        })
+                            })
                 return villagers
             return []
         except Exception as e:
@@ -878,10 +878,10 @@ class AIVillagerAgent:
             return {"action": "idle", "reason": "No API key configured"}
         
         try:
-                # 使用ReAct结构
-                prompt = self._build_react_prompt(context)
-                system_prompt = self._get_react_system_prompt()
-                max_tokens = 800
+            # 使用ReAct结构
+            prompt = self._build_react_prompt(context)
+            system_prompt = self._get_react_system_prompt()
+            max_tokens = 800
             
             # 调试：打印GPT看到的状态
             print(f"[AI Agent DEBUG] GPT看到的状态:")
@@ -925,7 +925,7 @@ class AIVillagerAgent:
             
             # 根据模式解析决策
             # 解析ReAct格式的响应
-                decision = self._parse_react_decision(decision_text)
+            decision = self._parse_react_decision(decision_text)
             
             # 记录决策历史
             self.decision_history.append({
@@ -1384,7 +1384,7 @@ Now follow the ReAct pattern:"""
                 elif action == "price":
                     # 显示查询的价格
                     if 'prices' in decision:
-                    prices = decision.get('prices', {})
+                        prices = decision.get('prices', {})
                         buy_prices = prices.get('buy', {})
                         if buy_prices:
                             observations.append(f"  → Prices: seed={buy_prices.get('seed', '?')}, wheat={buy_prices.get('wheat', '?')}, bread={buy_prices.get('bread', '?')}")
