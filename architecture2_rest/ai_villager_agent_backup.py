@@ -404,11 +404,8 @@ class AIVillagerAgent:
             can_trade = True
             reason = ""
             
-            # 只有体力不足时才无法交易，已提交行动不影响交易
-            if villager_data.get('stamina', 0) < 20:
-                can_trade = False
-                reason = "目标村民体力不足，无法交易"
-            elif villager_data.get('has_submitted_action', False):
+            # 交易不消耗体力，已提交行动不影响交易
+            if villager_data.get('has_submitted_action', False):
                 # 已提交行动但仍可交易，只是提醒状态
                 can_trade = True
                 reason = "目标村民已提交行动，但可以交易"
@@ -957,7 +954,7 @@ You must follow the ReAct (Reasoning + Acting) pattern:
 ## Available Actions:
 - `buy <item> <quantity>` - Buy from merchant (no action cost)
 - `sell <item> <quantity>` - Sell to merchant (no action cost)  
-- `eat` - Eat bread to restore stamina (no action cost)
+- `eat` - Eat bread to restore stamina (no action cost) **⚠️ REQUIRES BREAD IN INVENTORY!**
 - `produce` - Produce items (consumes action point + stamina)
 - `sleep` - Sleep to restore stamina (consumes action point, evening only, REQUIRES HOUSE OR TEMP_ROOM!)
 - `idle` - Skip current segment (consumes action point)
@@ -1148,7 +1145,7 @@ You operate autonomously, following the game's rules, using REST/CLI actions to 
 ## 3. Available Actions
 
 **Basic actions**
-* `eat` → consume bread to restore stamina (no action cost)
+* `eat` → consume bread to restore stamina (no action cost) **⚠️ REQUIRES BREAD IN INVENTORY!**
 * `sleep` → restore stamina; requires house/temp_room; consumes action point
 
 **Production (consumes action point + stamina)**
@@ -1166,7 +1163,7 @@ You operate autonomously, following the game's rules, using REST/CLI actions to 
 ## 4. Decision Loop (Every Time Period)
 
 1. **Survival first:**
-   * If stamina ≤ 35 → `eat` (if bread available).
+   * If stamina ≤ 35 → `eat` (if bread available) **⚠️ MUST HAVE BREAD IN INVENTORY!**
    * If it's Night and stamina ≤ 45 → `sleep` (if housing available).
 
 2. **Production logic (HIGH PRIORITY):**
