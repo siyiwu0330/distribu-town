@@ -585,8 +585,10 @@ def serve(port, node_id, coordinator_addr='localhost:50051'):
     def make_receive_message(service, nid):
         def receive_message():
             """接收消息的HTTP端点"""
+            print(f"[Villager-{nid}] DEBUG: 消息接收函数被调用")
             try:
                 data = request.json
+                print(f"[Villager-{nid}] DEBUG: 收到数据: {data}")
                 message = {
                     'message_id': data.get('message_id'),
                     'from': data.get('from'),
@@ -597,8 +599,10 @@ def serve(port, node_id, coordinator_addr='localhost:50051'):
                     'is_read': False
                 }
                 
+                print(f"[Villager-{nid}] DEBUG: 准备添加消息到列表，当前消息数: {len(service.messages)}")
                 # 添加到消息列表
                 service.messages.append(message)
+                print(f"[Villager-{nid}] DEBUG: 消息已添加，当前消息数: {len(service.messages)}")
                 print(f"[Villager-{nid}] 收到消息: {message['from']} -> {message['to']}: {message['content']}")
                 
                 return jsonify({'success': True, 'message': '消息接收成功'})
