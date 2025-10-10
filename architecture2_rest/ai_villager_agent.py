@@ -201,13 +201,13 @@ class AIVillagerAgent:
                     timeout=5
                 )
             elif action == "produce":
-                response = requests.post(f"{self.villager_url}/produce", timeout=5)
+                response = requests.post(f"{self.villager_url}/action/produce", timeout=5)
             elif action == "sleep":
-                response = requests.post(f"{self.villager_url}/sleep", timeout=5)
+                response = requests.post(f"{self.villager_url}/action/sleep", timeout=5)
             elif action == "eat":
-                response = requests.post(f"{self.villager_url}/eat", timeout=5)
+                response = requests.post(f"{self.villager_url}/action/eat", timeout=5)
             elif action == "idle":
-                response = requests.post(f"{self.villager_url}/idle", timeout=5)
+                response = requests.post(f"{self.villager_url}/action/idle", timeout=5)
             elif action == "price":
                 # price行动不需要调用API，直接返回成功
                 return True
