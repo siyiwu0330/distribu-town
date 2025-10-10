@@ -303,6 +303,12 @@ class AIVillagerAgent:
                 for trade in trades_received:
                     print(f"  {trade.get('trade_id', '')}: {trade.get('from', 'Unknown')} 想{trade.get('offer_type', '')} {trade.get('item', '')} x{trade.get('quantity', 0)} for {trade.get('price', 0)} gold")
             
+            trades_sent = context.get('trades_sent', [])
+            if trades_sent:
+                print(f"[AI Agent DEBUG] 发送的交易请求详情:")
+                for trade in trades_sent:
+                    print(f"  {trade.get('trade_id', '')}: 发送给 {trade.get('to', 'Unknown')} - {trade.get('offer_type', '')} {trade.get('item', '')} x{trade.get('quantity', 0)} for {trade.get('price', 0)} gold (状态: {trade.get('status', 'unknown')})")
+            
             response = openai.ChatCompletion.create(
                 model=self.model,
                 messages=[
