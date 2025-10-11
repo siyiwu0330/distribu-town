@@ -1,0 +1,106 @@
+# 村民CLI镜像：运行村民节点+interactive_cli.py
+FROM python:3.11-slim
+
+# 设置工作目录
+WORKDIR /app
+
+# 安装系统依赖
+RUN apt-get update && apt-get install -y \
+    gcc \
+    procps \
+    lsof \
+    curl \
+    && rm -rf /var/lib/apt/lists/*
+
+# 复制common模块和REST架构文件
+COPY common/ /app/common/
+COPY architecture2_rest/ /app/architecture2_rest/
+
+# 设置Python路径
+ENV PYTHONPATH=/app:$PYTHONPATH
+
+# 安装Python依赖
+RUN pip install --no-cache-dir -r /app/architecture2_rest/requirements.txt
+
+# 创建非root用户
+RUN useradd -m -u 1000 appuser && chown -R appuser:appuser /app
+USER appuser
+
+# 设置工作目录
+WORKDIR /app/architecture2_rest
+
+# 创建启动脚本
+USER root
+RUN echo '#!/bin/bash\n\
+set -e\n\
+\n\
+# 默认参数\n\
+PORT=${VILLAGER_PORT:-5002}\n\
+NODE_ID=${VILLAGER_NODE_ID:-node1}\n\
+COORDINATOR_HOST=${COORDINATOR_HOST:-coordinator}\n\
+COORDINATOR_PORT=${COORDINATOR_PORT:-5000}\n\
+MERCHANT_HOST=${MERCHANT_HOST:-merchant}\n\
+MERCHANT_PORT=${MERCHANT_PORT:-5001}\n\
+\n\
+echo "================================================"\n\
+echo "  启动村民CLI节点"\n\
+echo "================================================"\n\
+echo "端口: $PORT"\n\
+echo "节点ID: $NODE_ID"\n\
+echo "协调器: $COORDINATOR_HOST:$COORDINATOR_PORT"\n\
+echo "商人: $MERCHANT_HOST:$MERCHANT_PORT"\n\
+echo "================================================"\n\
+\n\
+# 等待基础服务启动\n\
+echo "等待基础服务启动..."\n\
+while ! curl -f http://$COORDINATOR_HOST:$COORDINATOR_PORT/time >/dev/null 2>&1; do\n\
+    echo "等待协调器启动..."\n\
+    sleep 2\n\
+done\n\
+\n\
+while ! curl -f http://$MERCHANT_HOST:$MERCHANT_PORT/prices >/dev/null 2>&1; do\n\
+    echo "等待商人启动..."\n\
+    sleep 2\n\
+done\n\
+\n\
+echo "基础服务已就绪！"\n\
+\n\
+# 启动村民节点\n\
+echo "启动村民节点..."\n\
+python villager.py --port $PORT --id $NODE_ID --coordinator $COORDINATOR_HOST:$COORDINATOR_PORT > /tmp/villager.log 2>&1 &\n\
+VILLAGER_PID=$!\n\
+sleep 3\n\
+\n\
+# 检查村民节点是否启动成功\n\
+if ! kill -0 $VILLAGER_PID 2>/dev/null; then\n\
+    echo "村民节点启动失败！"\n\
+    cat /tmp/villager.log\n\
+    exit 1\n\
+fi\n\
+\n\
+echo "村民节点启动成功 (PID: $VILLAGER_PID)"\n\
+\n\
+# 启动CLI\n\
+echo "启动交互式CLI..."\n\
+exec python interactive_cli.py --port $PORT --coordinator $COORDINATOR_PORT --merchant $MERCHANT_PORT --coordinator-host $COORDINATOR_HOST --merchant-host $MERCHANT_HOST\n\
+' > /app/architecture2_rest/start_villager_cli.sh && \
+    chmod +x /app/architecture2_rest/start_villager_cli.sh && \
+    chmod +x /app/architecture2_rest/start_villager.sh && \
+    chown -R appuser:appuser /app/architecture2_rest/
+
+# 切换回appuser
+USER appuser
+
+# 暴露端口范围
+EXPOSE 5002-50099
+
+# 设置环境变量
+ENV VILLAGER_PORT=5002
+ENV VILLAGER_NODE_ID=node1
+ENV COORDINATOR_HOST=coordinator
+ENV COORDINATOR_PORT=5000
+ENV MERCHANT_HOST=merchant
+ENV MERCHANT_PORT=5001
+
+# 启动脚本
+CMD ["./start_villager_cli.sh"]

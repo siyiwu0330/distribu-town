@@ -1,0 +1,87 @@
+# 开发环境镜像：支持交互式CLI和AI代理
+FROM distribu-town-base:latest
+
+# 复制所有架构文件
+COPY architecture1_grpc/ /app/architecture1_grpc/
+COPY architecture2_rest/ /app/architecture2_rest/
+
+# 安装所有依赖
+RUN pip install --no-cache-dir -r /app/architecture1_grpc/requirements.txt && \
+    pip install --no-cache-dir -r /app/architecture2_rest/requirements.txt
+
+# 安装开发工具
+RUN pip install --no-cache-dir \
+    ipython \
+    jupyter \
+    pytest \
+    black \
+    flake8
+
+# 设置工作目录
+WORKDIR /app
+
+# 确保所有脚本有执行权限
+USER root
+RUN chmod +x /app/architecture1_grpc/start_services.sh && \
+    chmod +x /app/architecture1_grpc/start_villager.sh && \
+    chmod +x /app/architecture2_rest/start_services.sh && \
+    chmod +x /app/architecture2_rest/start_villager.sh && \
+    chown -R appuser:appuser /app
+
+# 切换回appuser
+USER appuser
+
+# 暴露所有端口
+EXPOSE 5000-50099
+
+# 创建开发启动脚本
+RUN echo '#!/bin/bash\n\
+echo "=== DistribuTown 开发环境 ==="\n\
+echo "可用命令:"\n\
+echo "  start-grpc-services    - 启动gRPC基础服务"\n\
+echo "  start-rest-services    - 启动REST基础服务"\n\
+echo "  start-grpc-villager <port> <id> - 启动gRPC村民节点"\n\
+echo "  start-rest-villager <port> <id> - 启动REST村民节点"\n\
+echo "  cli-grpc <port>        - 启动gRPC CLI"\n\
+echo "  cli-rest <port>        - 启动REST CLI"\n\
+echo "  ai-grpc <port>         - 启动gRPC AI代理"\n\
+echo "  ai-rest <port>         - 启动REST AI代理"\n\
+echo "  bash                   - 进入bash shell"\n\
+echo ""\n\
+case "$1" in\n\
+    "start-grpc-services")\n\
+        cd /app/architecture1_grpc && ./start_services.sh\n\
+        ;;\n\
+    "start-rest-services")\n\
+        cd /app/architecture2_rest && ./start_services.sh\n\
+        ;;\n\
+    "start-grpc-villager")\n\
+        cd /app/architecture1_grpc && ./start_villager.sh "$2" "$3"\n\
+        ;;\n\
+    "start-rest-villager")\n\
+        cd /app/architecture2_rest && ./start_villager.sh "$2" "$3"\n\
+        ;;\n\
+    "cli-grpc")\n\
+        cd /app/architecture1_grpc && python interactive_cli.py --port "$2"\n\
+        ;;\n\
+    "cli-rest")\n\
+        cd /app/architecture2_rest && python interactive_cli.py --port "$2"\n\
+        ;;\n\
+    "ai-grpc")\n\
+        cd /app/architecture1_grpc && python ai_villager_agent.py --port "$2"\n\
+        ;;\n\
+    "ai-rest")\n\
+        cd /app/architecture2_rest && python ai_villager_agent.py --port "$2"\n\
+        ;;\n\
+    "bash")\n\
+        bash\n\
+        ;;\n\
+    *)\n\
+        echo "未知命令: $1"\n\
+        echo "使用不带参数运行此脚本查看帮助"\n\
+        ;;\n\
+esac' > /app/dev.sh && chmod +x /app/dev.sh
+
+# 设置入口点
+ENTRYPOINT ["./dev.sh"]
+CMD []

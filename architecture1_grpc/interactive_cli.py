@@ -10,8 +10,8 @@ import time
 from typing import Optional
 
 sys.path.insert(0, os.path.dirname(__file__))
-from proto import town_pb2
-from proto import town_pb2_grpc
+import town_pb2
+import town_pb2_grpc
 
 
 class VillagerCLI:
@@ -24,6 +24,9 @@ class VillagerCLI:
         self.villager_port = villager_port
         self.node_id = None  # 将在首次获取信息时设置
         self.pending_trades = {}  # 当前等待响应的交易
+        
+        # 消息系统
+        self.received_messages = []
     
     def _get_villager_stub(self):
         """获取villager stub"""
@@ -523,19 +526,18 @@ class VillagerCLI:
     def get_messages(self):
         """获取消息列表"""
         try:
-            my_node_id = self.get_node_id()
-            
             channel, stub = self._get_villager_stub()
             response = stub.GetMessages(town_pb2.GetMessagesRequest(
-                node_id=my_node_id
+                node_id=self.node_id
             ))
             channel.close()
             
             messages = []
             for msg in response.messages:
+                from_field = getattr(msg, 'from', 'unknown')
                 messages.append({
                     'message_id': msg.message_id,
-                    'from': msg.from_,
+                    'from': from_field,
                     'to': msg.to,
                     'content': msg.content,
                     'type': msg.type,

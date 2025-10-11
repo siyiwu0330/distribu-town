@@ -16,8 +16,8 @@ from datetime import datetime
 
 # 添加proto路径
 sys.path.insert(0, os.path.dirname(__file__))
-from proto import town_pb2
-from proto import town_pb2_grpc
+import town_pb2
+import town_pb2_grpc
 
 class AIVillagerAgent:
     """AI村民代理（gRPC版本）"""

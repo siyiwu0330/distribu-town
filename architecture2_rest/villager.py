@@ -23,8 +23,8 @@ app = Flask(__name__)
 villager_state = {
     'node_id': None,
     'villager': None,
-    'merchant_address': 'localhost:5001',
-    'coordinator_address': 'localhost:5000',
+    'merchant_address': os.getenv('MERCHANT_HOST', 'localhost') + ':' + os.getenv('MERCHANT_PORT', '5001'),
+    'coordinator_address': os.getenv('COORDINATOR_HOST', 'localhost') + ':' + os.getenv('COORDINATOR_PORT', '5000'),
     'messages': []  # 存储接收到的消息
 }
 
@@ -65,7 +65,7 @@ def create_villager():
         print(f"  货币: {villager.inventory.money}")
         
         # 创建村民后，重新注册到协调器以更新名字和职业
-        coordinator_addr = villager_state.get('coordinator_address', 'localhost:5000')
+        coordinator_addr = villager_state.get('coordinator_address', f"{os.getenv('COORDINATOR_HOST', 'localhost')}:{os.getenv('COORDINATOR_PORT', '5000')}")
         port = villager_state.get('port')
         node_id = villager_state['node_id']
         
@@ -76,7 +76,7 @@ def create_villager():
                     json={
                         'node_id': node_id,
                         'node_type': 'villager',
-                        'address': f'localhost:{port}',
+                        'address': f"{os.getenv('VILLAGER_HOST', 'localhost')}:{port}",
                         'name': villager.name,
                         'occupation': villager.occupation.value
                     },
@@ -1521,7 +1521,7 @@ def register_to_coordinator(coordinator_addr, port, node_id):
             json={
                 'node_id': node_id,
                 'node_type': 'villager',
-                'address': f'localhost:{port}',
+                'address': f"{os.getenv('VILLAGER_HOST', 'localhost')}:{port}",
                 'name': villager_name or node_id
             },
             timeout=5
@@ -1539,7 +1539,7 @@ def register_to_coordinator(coordinator_addr, port, node_id):
         print(f"[Villager-{node_id}] 无法连接到协调器 {coordinator_addr}: {e}")
 
 
-def run_server(port, node_id, coordinator_addr='localhost:5000'):
+def run_server(port, node_id, coordinator_addr=None):
     """运行服务器"""
     villager_state['node_id'] = node_id
     villager_state['coordinator_address'] = coordinator_addr
@@ -1563,7 +1563,7 @@ if __name__ == '__main__':
     parser = argparse.ArgumentParser(description='REST村民节点服务')
     parser.add_argument('--port', type=int, required=True, help='监听端口')
     parser.add_argument('--id', type=str, required=True, help='节点ID')
-    parser.add_argument('--coordinator', type=str, default='localhost:5000',
+    parser.add_argument('--coordinator', type=str, default=f"{os.getenv('COORDINATOR_HOST', 'localhost')}:{os.getenv('COORDINATOR_PORT', '5000')}",
                        help='协调器地址')
     args = parser.parse_args()
     

@@ -1,0 +1,141 @@
+# 村民AI镜像：运行村民节点+ai_villager_agent.py
+FROM python:3.11-slim
+
+# 设置工作目录
+WORKDIR /app
+
+# 安装系统依赖
+RUN apt-get update && apt-get install -y \
+    gcc \
+    procps \
+    lsof \
+    curl \
+    && rm -rf /var/lib/apt/lists/*
+
+# 复制common模块和REST架构文件
+COPY common/ /app/common/
+COPY architecture2_rest/ /app/architecture2_rest/
+
+# 设置Python路径
+ENV PYTHONPATH=/app:$PYTHONPATH
+
+# 安装Python依赖
+RUN pip install --no-cache-dir -r /app/architecture2_rest/requirements.txt && \
+    pip install --no-cache-dir openai
+
+# 创建非root用户
+RUN useradd -m -u 1000 appuser && chown -R appuser:appuser /app
+USER appuser
+
+# 设置工作目录
+WORKDIR /app/architecture2_rest
+
+# 创建启动脚本
+USER root
+RUN echo '#!/bin/bash\n\
+set -e\n\
+\n\
+# 默认参数\n\
+PORT=${VILLAGER_PORT:-5002}\n\
+NODE_ID=${VILLAGER_NODE_ID:-node1}\n\
+COORDINATOR_HOST=${COORDINATOR_HOST:-coordinator}\n\
+COORDINATOR_PORT=${COORDINATOR_PORT:-5000}\n\
+MERCHANT_HOST=${MERCHANT_HOST:-merchant}\n\
+MERCHANT_PORT=${MERCHANT_PORT:-5001}\n\
+AI_NAME=${AI_NAME:-Alice}\n\
+AI_OCCUPATION=${AI_OCCUPATION:-farmer}\n\
+AI_GENDER=${AI_GENDER:-female}\n\
+AI_PERSONALITY=${AI_PERSONALITY:-勤劳的农夫}\n\
+AI_API_KEY=${AI_API_KEY:-}\n\
+AI_MODEL=${AI_MODEL:-gpt-4}\n\
+AI_USE_REACT=${AI_USE_REACT:-false}\n\
+\n\
+echo "================================================"\n\
+echo "  启动村民AI节点"\n\
+echo "================================================"\n\
+echo "端口: $PORT"\n\
+echo "节点ID: $NODE_ID"\n\
+echo "协调器: $COORDINATOR_HOST:$COORDINATOR_PORT"\n\
+echo "商人: $MERCHANT_HOST:$MERCHANT_PORT"\n\
+echo "AI名称: $AI_NAME"\n\
+echo "AI职业: $AI_OCCUPATION"\n\
+echo "AI性别: $AI_GENDER"\n\
+echo "AI性格: $AI_PERSONALITY"\n\
+echo "AI模型: $AI_MODEL"\n\
+echo "使用ReAct: $AI_USE_REACT"\n\
+echo "================================================"\n\
+\n\
+# 等待基础服务启动\n\
+echo "等待基础服务启动..."\n\
+while ! curl -f http://$COORDINATOR_HOST:$COORDINATOR_PORT/time >/dev/null 2>&1; do\n\
+    echo "等待协调器启动..."\n\
+    sleep 2\n\
+done\n\
+\n\
+while ! curl -f http://$MERCHANT_HOST:$MERCHANT_PORT/prices >/dev/null 2>&1; do\n\
+    echo "等待商人启动..."\n\
+    sleep 2\n\
+done\n\
+\n\
+echo "基础服务已就绪！"\n\
+\n\
+# 启动村民节点\n\
+echo "启动村民节点..."\n\
+python villager.py --port $PORT --id $NODE_ID --coordinator $COORDINATOR_HOST:$COORDINATOR_PORT > /tmp/villager.log 2>&1 &\n\
+VILLAGER_PID=$!\n\
+sleep 3\n\
+\n\
+# 检查村民节点是否启动成功\n\
+if ! kill -0 $VILLAGER_PID 2>/dev/null; then\n\
+    echo "村民节点启动失败！"\n\
+    cat /tmp/villager.log\n\
+    exit 1\n\
+fi\n\
+\n\
+echo "村民节点启动成功 (PID: $VILLAGER_PID)"\n\
+\n\
+# 构建AI Agent启动参数\n\
+AI_ARGS="--port $PORT --coordinator $COORDINATOR_PORT --merchant $MERCHANT_PORT"\n\
+AI_ARGS="$AI_ARGS --coordinator-host $COORDINATOR_HOST --merchant-host $MERCHANT_HOST"\n\
+AI_ARGS="$AI_ARGS --model $AI_MODEL"\n\
+\n\
+if [ ! -z "$AI_API_KEY" ]; then\n\
+    AI_ARGS="$AI_ARGS --api-key $AI_API_KEY"\n\
+fi\n\
+\n\
+if [ "$AI_USE_REACT" = "true" ]; then\n\
+    AI_ARGS="$AI_ARGS --react"\n\
+fi\n\
+\n\
+# 启动AI Agent\n\
+echo "启动AI Agent..."\n\
+echo "参数: $AI_ARGS"\n\
+exec python ai_villager_agent.py $AI_ARGS\n\
+' > /app/architecture2_rest/start_villager_ai.sh && \
+    chmod +x /app/architecture2_rest/start_villager_ai.sh && \
+    chmod +x /app/architecture2_rest/start_villager.sh && \
+    chown -R appuser:appuser /app/architecture2_rest/
+
+# 切换回appuser
+USER appuser
+
+# 暴露端口范围
+EXPOSE 5002-50099
+
+# 设置环境变量
+ENV VILLAGER_PORT=5002
+ENV VILLAGER_NODE_ID=node1
+ENV COORDINATOR_HOST=coordinator
+ENV COORDINATOR_PORT=5000
+ENV MERCHANT_HOST=merchant
+ENV MERCHANT_PORT=5001
+ENV AI_NAME=Alice
+ENV AI_OCCUPATION=farmer
+ENV AI_GENDER=female
+ENV AI_PERSONALITY=勤劳的农夫
+ENV AI_API_KEY=
+ENV AI_MODEL=gpt-4
+ENV AI_USE_REACT=false
+
+# 启动脚本
+CMD ["./start_villager_ai.sh"]

@@ -13,7 +13,8 @@ WORKDIR /app/architecture2_rest
 # 暴露端口范围（5002-50099用于村民节点）
 EXPOSE 5002-50099
 
-# 创建启动脚本
+# 创建启动脚本（在root权限下）
+USER root
 RUN echo '#!/bin/bash\n\
 if [ "$1" = "--cli" ]; then\n\
     echo "Starting villager with CLI mode..."\n\
@@ -27,7 +28,13 @@ else\n\
     echo "Starting villager node..."\n\
     ./start_villager.sh "$@"\n\
 fi' > /app/architecture2_rest/start_villager_mode.sh && \
-    chmod +x /app/architecture2_rest/start_villager_mode.sh
+    chmod +x /app/architecture2_rest/start_villager_mode.sh && \
+    chmod +x /app/architecture2_rest/start_villager.sh && \
+    chown -R appuser:appuser /app/architecture2_rest/
 
-# 默认启动命令
-CMD ["./start_villager_mode.sh"]
+# 切换回appuser
+USER appuser
+
+# 设置入口点
+ENTRYPOINT ["./start_villager_mode.sh"]
+CMD []

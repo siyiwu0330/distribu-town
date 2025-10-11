@@ -11,8 +11,8 @@ import time
 from typing import Dict, List, Optional, Any
 
 sys.path.insert(0, os.path.dirname(__file__))
-from proto import town_pb2
-from proto import town_pb2_grpc
+import town_pb2
+import town_pb2_grpc
 
 
 class GRPCAdapter:
@@ -194,9 +194,7 @@ class GRPCAdapter:
         """获取消息"""
         try:
             channel, stub = self._get_villager_stub()
-            response = stub.GetMessages(town_pb2.GetMessagesRequest(
-                node_id=self.node_id
-            ))
+            response = stub.GetMessages(town_pb2.GetMessagesRequest())
             channel.close()
             
             messages = []
@@ -228,6 +226,21 @@ class GRPCAdapter:
             return response.success
         except Exception as e:
             print(f"[gRPC Adapter] 发送消息失败: {e}")
+            return False
+    
+    def broadcast_message(self, content: str) -> bool:
+        """广播消息"""
+        try:
+            channel, stub = self._get_villager_stub()
+            response = stub.SendMessage(town_pb2.SendMessageRequest(
+                target='broadcast',
+                content=content,
+                type='broadcast'
+            ))
+            channel.close()
+            return response.success
+        except Exception as e:
+            print(f"[gRPC Adapter] 广播消息失败: {e}")
             return False
     
     # ========== 交易系统 ==========

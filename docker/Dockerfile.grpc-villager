@@ -13,7 +13,8 @@ WORKDIR /app/architecture1_grpc
 # 暴露端口范围（50053-50099用于村民节点）
 EXPOSE 50053-50099
 
-# 创建启动脚本
+# 创建启动脚本（在root权限下）
+USER root
 RUN echo '#!/bin/bash\n\
 if [ "$1" = "--cli" ]; then\n\
     echo "Starting villager with CLI mode..."\n\
@@ -23,11 +24,21 @@ elif [ "$1" = "--ai" ]; then\n\
     echo "Starting villager with AI mode..."\n\
     shift\n\
     python ai_villager_agent.py "$@"\n\
+elif [ "$1" = "--service" ]; then\n\
+    echo "Starting villager service..."\n\
+    shift\n\
+    ./start_villager.sh "$@"\n\
 else\n\
-    echo "Starting villager node..."\n\
+    echo "Starting villager service (default)..."\n\
     ./start_villager.sh "$@"\n\
 fi' > /app/architecture1_grpc/start_villager_mode.sh && \
-    chmod +x /app/architecture1_grpc/start_villager_mode.sh
+    chmod +x /app/architecture1_grpc/start_villager_mode.sh && \
+    chmod +x /app/architecture1_grpc/start_villager.sh && \
+    chown -R appuser:appuser /app/architecture1_grpc/
 
-# 默认启动命令
-CMD ["./start_villager_mode.sh"]
+# 切换回appuser
+USER appuser
+
+# 设置入口点
+ENTRYPOINT ["./start_villager_mode.sh"]
+CMD []

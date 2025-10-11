@@ -12,8 +12,8 @@ import os
 # 添加路径以导入生成的proto文件
 sys.path.insert(0, os.path.dirname(__file__))
 
-from proto import town_pb2
-from proto import town_pb2_grpc
+import town_pb2
+import town_pb2_grpc
 
 # 添加common模块路径
 sys.path.insert(0, os.path.join(os.path.dirname(__file__), '..'))

@@ -11,8 +11,8 @@ import time
 
 # 添加路径
 sys.path.insert(0, os.path.dirname(__file__))
-from proto import town_pb2
-from proto import town_pb2_grpc
+import town_pb2
+import town_pb2_grpc
 
 sys.path.insert(0, os.path.join(os.path.dirname(__file__), '..'))
 from common.models import (
@@ -30,7 +30,7 @@ class VillagerNodeService(town_pb2_grpc.VillagerNodeServicer):
         self.villager = None
         self.merchant_address = 'localhost:50052'
         
-        # 消息系统
+        # 消息系统 - 简单存储
         self.messages = []  # 存储消息
         self.message_counter = 0
         
@@ -366,26 +366,15 @@ class VillagerNodeService(town_pb2_grpc.VillagerNodeServicer):
             self.message_counter += 1
             message_id = f"msg_{self.message_counter}"
             
-            # 创建消息
-            message = {
-                'message_id': message_id,
-                'from': self.node_id,
-                'to': request.target,
-                'content': request.content,
-                'type': request.type,
-                'timestamp': int(time.time()),
-                'is_read': False
-            }
-            
-            # 如果是广播消息，发送给所有在线村民
+            # 如果是广播消息
             if request.type == 'broadcast':
-                message['to'] = 'broadcast'
-                # 通过coordinator获取所有在线村民并发送
+                # 发送给所有在线村民节点
+                sent_count = 0
                 try:
-                    from proto import town_pb2_grpc
+                    import town_pb2_grpc
                     import grpc
                     
-                    # 连接到coordinator获取在线村民
+                    # 连接到coordinator获取所有在线村民
                     coordinator_channel = grpc.insecure_channel('localhost:50051')
                     coordinator_stub = town_pb2_grpc.TimeCoordinatorStub(coordinator_channel)
                     
@@ -400,37 +389,33 @@ class VillagerNodeService(town_pb2_grpc.VillagerNodeServicer):
                                 target_channel = grpc.insecure_channel(node.address)
                                 target_stub = town_pb2_grpc.VillagerNodeStub(target_channel)
                                 
-                                # 创建接收消息
-                                receive_message = {
-                                    'message_id': f"{message_id}_to_{node.node_id}",
-                                    'from': self.node_id,
-                                    'to': node.node_id,
-                                    'content': request.content,
-                                    'type': 'broadcast',
-                                    'timestamp': int(time.time()),
-                                    'is_read': False
-                                }
+                                # 调用目标节点的ReceiveMessage方法
+                                receive_request = town_pb2.ReceiveMessageRequest(
+                                    content=request.content,
+                                    type='broadcast',
+                                    timestamp=int(time.time())
+                                )
+                                # 设置from字段（因为from是Python关键字）
+                                setattr(receive_request, 'from', self.node_id)
+                                response = target_stub.ReceiveMessage(receive_request)
                                 
-                                # 直接调用目标节点的消息接收方法（这里需要实现）
-                                # 简化实现：通过HTTP请求发送
-                                import requests
-                                try:
-                                    http_port = int(node.address.split(':')[1]) + 1000
-                                    requests.post(f"http://{node.address.split(':')[0]}:{http_port}/messages/receive", 
-                                                json=receive_message, timeout=2)
-                                except:
-                                    pass  # 忽略发送失败
+                                if response.success:
+                                    sent_count += 1
                                 
                                 target_channel.close()
                             except Exception as e:
                                 print(f"[Villager-{self.node_id}] 发送广播消息到 {node.node_id} 失败: {e}")
                                 continue
+                    
+                    print(f"[Villager-{self.node_id}] 广播消息发送给 {sent_count} 个节点")
+                    
                 except Exception as e:
                     print(f"[Villager-{self.node_id}] 获取在线村民失败: {e}")
+                
             else:
-                # 私聊消息，发送给指定目标
+                # P2P消息，发送给指定目标
                 try:
-                    from proto import town_pb2_grpc
+                    import town_pb2_grpc
                     import grpc
                     
                     # 连接到coordinator获取目标村民地址
@@ -449,31 +434,45 @@ class VillagerNodeService(town_pb2_grpc.VillagerNodeServicer):
                     
                     if target_address:
                         # 发送给目标村民
-                        import requests
                         try:
-                            receive_message = {
-                                'message_id': f"{message_id}_to_{request.target}",
-                                'from': self.node_id,
-                                'to': request.target,
-                                'content': request.content,
-                                'type': 'private',
-                                'timestamp': int(time.time()),
-                                'is_read': False
-                            }
-                            requests.post(f"http://{target_address.split(':')[0]}:{int(target_address.split(':')[1]) + 1000}/messages/receive", 
-                                        json=receive_message, timeout=2)
+                            target_channel = grpc.insecure_channel(target_address)
+                            target_stub = town_pb2_grpc.VillagerNodeStub(target_channel)
+                            
+                            # 调用目标节点的ReceiveMessage方法
+                            receive_request = town_pb2.ReceiveMessageRequest(
+                                content=request.content,
+                                type='private',
+                                timestamp=int(time.time())
+                            )
+                            # 设置from字段（因为from是Python关键字）
+                            setattr(receive_request, 'from', self.node_id)
+                            response = target_stub.ReceiveMessage(receive_request)
+                            
+                            if response.success:
+                                print(f"[Villager-{self.node_id}] P2P消息发送给 {request.target}")
+                            else:
+                                return town_pb2.SendMessageResponse(
+                                    success=False,
+                                    message=f"发送失败: {response.message}"
+                                )
+                            
+                            target_channel.close()
                         except Exception as e:
-                            print(f"[Villager-{self.node_id}] 发送私聊消息到 {request.target} 失败: {e}")
+                            return town_pb2.SendMessageResponse(
+                                success=False,
+                                message=f"发送失败: {str(e)}"
+                            )
                     else:
-                        print(f"[Villager-{self.node_id}] 找不到目标村民: {request.target}")
+                        return town_pb2.SendMessageResponse(
+                            success=False,
+                            message=f"找不到目标村民: {request.target}"
+                        )
                         
                 except Exception as e:
-                    print(f"[Villager-{self.node_id}] 发送私聊消息失败: {e}")
-            
-            # 存储到自己的消息列表（发送记录）
-            self.messages.append(message)
-            
-            print(f"[Villager-{self.node_id}] 发送消息: {request.type} -> {request.target}: {request.content}")
+                    return town_pb2.SendMessageResponse(
+                        success=False,
+                        message=f"发送失败: {str(e)}"
+                    )
             
             return town_pb2.SendMessageResponse(
                 success=True,
@@ -487,6 +486,47 @@ class VillagerNodeService(town_pb2_grpc.VillagerNodeServicer):
                 message=f"发送消息失败: {str(e)}"
             )
     
+    def ReceiveMessage(self, request, context):
+        """接收消息（由其他村民节点调用）"""
+        try:
+            if not self.villager:
+                return town_pb2.ReceiveMessageResponse(
+                    success=False, 
+                    message="村民未初始化"
+                )
+            
+            import time
+            self.message_counter += 1
+            message_id = f"rcv_{self.message_counter}"
+            
+            # 创建接收到的消息
+            from_field = getattr(request, 'from', 'unknown')
+            message = {
+                'message_id': message_id,
+                'from': from_field,
+                'to': self.node_id,
+                'content': request.content,
+                'type': request.type,
+                'timestamp': request.timestamp,
+                'is_read': False
+            }
+            
+            # 存储到消息列表
+            self.messages.append(message)
+            
+            print(f"[Villager-{self.node_id}] 收到消息: {request.type} from {from_field}: {request.content}")
+            
+            return town_pb2.ReceiveMessageResponse(
+                success=True,
+                message="消息接收成功"
+            )
+            
+        except Exception as e:
+            return town_pb2.ReceiveMessageResponse(
+                success=False,
+                message=f"接收消息失败: {str(e)}"
+            )
+    
     def GetMessages(self, request, context):
         """获取消息列表"""
         try:
@@ -498,13 +538,14 @@ class VillagerNodeService(town_pb2_grpc.VillagerNodeServicer):
             for msg in self.messages:
                 proto_msg = town_pb2.Message(
                     message_id=msg['message_id'],
-                    from_=msg['from'],
                     to=msg['to'],
                     content=msg['content'],
                     type=msg['type'],
                     timestamp=msg['timestamp'],
                     is_read=msg['is_read']
                 )
+                # 设置from字段（因为from是Python关键字）
+                setattr(proto_msg, 'from', msg['from'])
                 proto_messages.append(proto_msg)
             
             return town_pb2.GetMessagesResponse(messages=proto_messages)
@@ -512,36 +553,6 @@ class VillagerNodeService(town_pb2_grpc.VillagerNodeServicer):
         except Exception as e:
             return town_pb2.GetMessagesResponse(messages=[])
     
-    def MarkMessagesRead(self, request, context):
-        """标记消息为已读"""
-        try:
-            if not self.villager:
-                return town_pb2.MarkMessagesReadResponse(
-                    success=False,
-                    message="村民未初始化"
-                )
-            
-            if request.message_id:
-                # 标记特定消息为已读
-                for msg in self.messages:
-                    if msg['message_id'] == request.message_id:
-                        msg['is_read'] = True
-                        break
-            else:
-                # 标记所有消息为已读
-                for msg in self.messages:
-                    msg['is_read'] = True
-            
-            return town_pb2.MarkMessagesReadResponse(
-                success=True,
-                message="消息已标记为已读"
-            )
-            
-        except Exception as e:
-            return town_pb2.MarkMessagesReadResponse(
-                success=False,
-                message=f"标记消息失败: {str(e)}"
-            )
 
 
 def serve(port, node_id, coordinator_addr='localhost:50051'):
@@ -575,69 +586,8 @@ def serve(port, node_id, coordinator_addr='localhost:50051'):
     except Exception as e:
         print(f"[Villager-{node_id}] 无法连接到协调器 {coordinator_addr}: {e}")
     
-    # 启动HTTP服务器用于接收消息
-    from flask import Flask, request, jsonify
-    import threading
-    
-    app = Flask(__name__)
-    
-    # 创建一个闭包来访问villager_service
-    def make_receive_message(service, nid):
-        def receive_message():
-            """接收消息的HTTP端点"""
-            print(f"[Villager-{nid}] DEBUG: 消息接收函数被调用")
-            try:
-                data = request.json
-                print(f"[Villager-{nid}] DEBUG: 收到数据: {data}")
-                message = {
-                    'message_id': data.get('message_id'),
-                    'from': data.get('from'),
-                    'to': data.get('to'),
-                    'content': data.get('content'),
-                    'type': data.get('type'),
-                    'timestamp': data.get('timestamp'),
-                    'is_read': False
-                }
-                
-                print(f"[Villager-{nid}] DEBUG: 准备添加消息到列表，当前消息数: {len(service.messages)}")
-                # 添加到消息列表
-                service.messages.append(message)
-                print(f"[Villager-{nid}] DEBUG: 消息已添加，当前消息数: {len(service.messages)}")
-                print(f"[Villager-{nid}] 收到消息: {message['from']} -> {message['to']}: {message['content']}")
-                
-                return jsonify({'success': True, 'message': '消息接收成功'})
-            except Exception as e:
-                print(f"[Villager-{nid}] 接收消息失败: {e}")
-                import traceback
-                traceback.print_exc()
-                return jsonify({'success': False, 'message': str(e)}), 500
-        return receive_message
-    
-    # 注册消息接收路由
-    receive_func = make_receive_message(villager_service, node_id)
-    app.add_url_rule('/messages/receive', 'receive_message', receive_func, methods=['POST'])
-    
-    @app.route('/health', methods=['GET'])
-    def health_check():
-        """健康检查端点"""
-        return jsonify({'status': 'healthy', 'node_id': node_id})
-    
-    @app.route('/test', methods=['GET'])
-    def test_endpoint():
-        """测试端点"""
-        return jsonify({'message': f'HTTP server working for {node_id}', 'port': port + 1000})
-    
-    # 在单独线程中启动HTTP服务器
-    def run_http_server():
-        try:
-            print(f"[Villager-{node_id}] 正在启动HTTP服务器，端口: {port + 1000}")
-            app.run(host='0.0.0.0', port=port + 1000, debug=False)
-        except Exception as e:
-            print(f"[Villager-{node_id}] HTTP服务器启动失败: {e}")
-    
-    http_thread = threading.Thread(target=run_http_server, daemon=True)
-    http_thread.start()
-    print(f"[Villager-{node_id}] HTTP服务器启动，端口: {port + 1000}")
+    # 使用纯gRPC消息系统
+    print(f"[Villager-{node_id}] 使用纯gRPC消息系统，无需HTTP服务器")
     
     print(f"[Villager-{node_id}] 使用 Ctrl+C 停止服务器")
     

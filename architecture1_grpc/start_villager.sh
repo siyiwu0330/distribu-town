@@ -29,7 +29,8 @@ python -c "
 import grpc
 import sys
 sys.path.insert(0, '.')
-from proto import town_pb2, town_pb2_grpc
+import town_pb2
+import town_pb2_grpc
 
 try:
     channel = grpc.insecure_channel('localhost:50051')
@@ -102,7 +103,8 @@ python -c "
 import grpc
 import sys
 sys.path.insert(0, '.')
-from proto import town_pb2, town_pb2_grpc
+import town_pb2
+import town_pb2_grpc
 
 try:
     channel = grpc.insecure_channel('localhost:50051')

@@ -11,8 +11,8 @@ import time
 
 # 添加路径
 sys.path.insert(0, os.path.dirname(__file__))
-from proto import town_pb2
-from proto import town_pb2_grpc
+import town_pb2
+import town_pb2_grpc
 
 sys.path.insert(0, os.path.join(os.path.dirname(__file__), '..'))
 from common.models import MERCHANT_PRICES

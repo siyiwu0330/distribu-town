@@ -10,8 +10,17 @@ RUN pip install --no-cache-dir -r /app/architecture1_grpc/requirements.txt
 # 设置工作目录
 WORKDIR /app/architecture1_grpc
 
+# 确保脚本有执行权限
+USER root
+RUN chmod +x /app/architecture1_grpc/start_services.sh
+USER appuser
+
 # 暴露端口
 EXPOSE 50051 50052
+
+# 健康检查
+HEALTHCHECK --interval=30s --timeout=10s --start-period=5s --retries=3 \
+    CMD python -c "import grpc; import town_pb2; import town_pb2_grpc; channel = grpc.insecure_channel('localhost:50051'); stub = town_pb2_grpc.TimeCoordinatorStub(channel); stub.ListNodes(town_pb2.Empty()); channel.close()" || exit 1
 
 # 启动脚本
 CMD ["./start_services.sh"]

@@ -478,7 +478,7 @@ def register_to_coordinator(coordinator_addr, port):
             json={
                 'node_id': node_id,
                 'node_type': 'merchant',
-                'address': f'localhost:{port}'
+                'address': f"{os.getenv('MERCHANT_HOST', 'localhost')}:{port}"
             },
             timeout=5
         )
@@ -492,7 +492,7 @@ def register_to_coordinator(coordinator_addr, port):
         print(f"[Merchant] 无法连接到协调器 {coordinator_addr}: {e}")
 
 
-def run_server(port=5001, coordinator_addr='localhost:5000'):
+def run_server(port=5001, coordinator_addr=None):
     """运行服务器"""
     print(f"[Merchant] REST商人节点启动在端口 {port}")
     print(f"[Merchant] 出售价格: {prices['buy']}")
@@ -512,7 +512,7 @@ if __name__ == '__main__':
     import argparse
     parser = argparse.ArgumentParser(description='REST商人节点服务')
     parser.add_argument('--port', type=int, default=5001, help='监听端口')
-    parser.add_argument('--coordinator', type=str, default='localhost:5000',
+    parser.add_argument('--coordinator', type=str, default=f"{os.getenv('COORDINATOR_HOST', 'localhost')}:{os.getenv('COORDINATOR_PORT', '5000')}",
                        help='协调器地址')
     args = parser.parse_args()
     

@@ -1,0 +1,90 @@
+# 基础服务镜像：包含coordinator和merchant节点
+FROM python:3.11-slim
+
+# 设置工作目录
+WORKDIR /app
+
+# 安装系统依赖
+RUN apt-get update && apt-get install -y \
+    gcc \
+    procps \
+    lsof \
+    curl \
+    && rm -rf /var/lib/apt/lists/*
+
+# 复制common模块和REST架构文件
+COPY common/ /app/common/
+COPY architecture2_rest/ /app/architecture2_rest/
+
+# 设置Python路径
+ENV PYTHONPATH=/app:$PYTHONPATH
+
+# 安装Python依赖
+RUN pip install --no-cache-dir -r /app/architecture2_rest/requirements.txt
+
+# 创建非root用户
+RUN useradd -m -u 1000 appuser && chown -R appuser:appuser /app
+USER appuser
+
+# 设置工作目录
+WORKDIR /app/architecture2_rest
+
+# 确保脚本有执行权限
+USER root
+RUN chmod +x /app/architecture2_rest/start_services.sh
+USER appuser
+
+# 暴露端口
+EXPOSE 5000 5001
+
+# 健康检查
+HEALTHCHECK --interval=30s --timeout=10s --start-period=5s --retries=3 \
+    CMD curl -f http://localhost:5000/time || exit 1
+
+# 复制测试脚本
+COPY docker/test_services.py /app/architecture2_rest/
+
+# 创建保持运行的启动脚本
+USER root
+RUN echo '#!/bin/bash\n\
+set -e\n\
+\n\
+echo "================================================"\n\
+echo "  启动基础服务节点 (Coordinator + Merchant)"\n\
+echo "================================================"\n\
+\n\
+# 启动coordinator\n\
+echo "启动Coordinator (端口5000)..."\n\
+python coordinator.py --port 5000 > /tmp/coord.log 2>&1 &\n\
+COORD_PID=$!\n\
+sleep 2\n\
+\n\
+# 启动merchant\n\
+echo "启动Merchant (端口5001)..."\n\
+python merchant.py --port 5001 --coordinator localhost:5000 > /tmp/merchant.log 2>&1 &\n\
+MERCH_PID=$!\n\
+sleep 2\n\
+\n\
+echo "基础服务启动完成"\n\
+echo "  Coordinator: PID $COORD_PID (端口 5000)"\n\
+echo "  Merchant:    PID $MERCH_PID (端口 5001)"\n\
+\n\
+# 测试连接\n\
+echo "测试连接..."\n\
+python test_services.py\n\
+\n\
+echo "================================================"\n\
+echo "  基础服务就绪！容器将保持运行"\n\
+echo "================================================"\n\
+\n\
+# 保持容器运行\n\
+tail -f /dev/null\n\
+' > /app/architecture2_rest/start_services_docker.sh && \
+    chmod +x /app/architecture2_rest/start_services_docker.sh && \
+    chown -R appuser:appuser /app/architecture2_rest/
+
+# 切换回appuser
+USER appuser
+
+# 启动脚本
+CMD ["./start_services_docker.sh"]

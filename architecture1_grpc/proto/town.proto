@@ -122,10 +122,10 @@ service VillagerNode {
     // 交易执行（由商人调用，用于原子操作）
     rpc TradeExecute(TradeExecuteRequest) returns (Status);
     
-    // 消息系统
+    // 消息系统（简单直接调用）
     rpc SendMessage(SendMessageRequest) returns (SendMessageResponse);
+    rpc ReceiveMessage(ReceiveMessageRequest) returns (ReceiveMessageResponse);
     rpc GetMessages(GetMessagesRequest) returns (GetMessagesResponse);
-    rpc MarkMessagesRead(MarkMessagesReadRequest) returns (MarkMessagesReadResponse);
 }
 
 // ============ 商人节点服务 ============
@@ -215,7 +215,8 @@ message RejectTradeRequest {
     string node_id = 2;
 }
 
-// 消息系统
+// ============ 消息系统 ============
+
 message Message {
     string message_id = 1;
     string from = 2;
@@ -227,15 +228,27 @@ message Message {
 }
 
 message SendMessageRequest {
-    string target = 1;
-    string content = 2;
-    string type = 3;  // 'private' or 'broadcast'
+    string target = 1;       // 目标村民ID（P2P）或 'broadcast'（广播）
+    string content = 2;      // 消息内容
+    string type = 3;         // 'private' or 'broadcast'
 }
 
 message SendMessageResponse {
     bool success = 1;
     string message = 2;
     string message_id = 3;
+}
+
+message ReceiveMessageRequest {
+    string from = 1;
+    string content = 2;
+    string type = 3;  // 'private' or 'broadcast'
+    int64 timestamp = 4;
+}
+
+message ReceiveMessageResponse {
+    bool success = 1;
+    string message = 2;
 }
 
 message GetMessagesRequest {
@@ -246,15 +259,6 @@ message GetMessagesResponse {
     repeated Message messages = 1;
 }
 
-message MarkMessagesReadRequest {
-    string node_id = 1;
-    string message_id = 2;  // 可选，如果不提供则标记所有消息为已读
-}
-
-message MarkMessagesReadResponse {
-    bool success = 1;
-    string message = 2;
-}
 
 service MerchantNode {
     // 从商人处购买

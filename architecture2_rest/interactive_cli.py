@@ -13,10 +13,11 @@ from typing import Optional
 class VillagerCLI:
     """村民节点交互式CLI"""
     
-    def __init__(self, villager_port: int, coordinator_port: int = 5000, merchant_port: int = 5001):
+    def __init__(self, villager_port: int, coordinator_port: int = 5000, merchant_port: int = 5001, 
+                 coordinator_host: str = "localhost", merchant_host: str = "localhost"):
         self.villager_url = f"http://localhost:{villager_port}"
-        self.coordinator_url = f"http://localhost:{coordinator_port}"
-        self.merchant_url = f"http://localhost:{merchant_port}"
+        self.coordinator_url = f"http://{coordinator_host}:{coordinator_port}"
+        self.merchant_url = f"http://{merchant_host}:{merchant_port}"
         self.villager_port = villager_port
         self.pending_trades = {}  # 当前等待响应的交易，key为trade_id
     
@@ -420,7 +421,7 @@ class VillagerCLI:
             # 获取收到的交易
             received_response = requests.get(
                 f"{self.merchant_url}/trade/list",
-                params={'node_id': node_id, 'type': 'received'},
+                params={'node_id': node_id, 'type': 'pending'},
                 timeout=5
             )
             
@@ -1391,9 +1392,14 @@ def main():
                        help='协调器端口 (默认: 5000)')
     parser.add_argument('--merchant', type=int, default=5001,
                        help='商人端口 (默认: 5001)')
+    parser.add_argument('--coordinator-host', type=str, default='localhost',
+                       help='协调器主机 (默认: localhost)')
+    parser.add_argument('--merchant-host', type=str, default='localhost',
+                       help='商人主机 (默认: localhost)')
     args = parser.parse_args()
     
-    cli = VillagerCLI(args.port, args.coordinator, args.merchant)
+    cli = VillagerCLI(args.port, args.coordinator, args.merchant, 
+                     args.coordinator_host, args.merchant_host)
     cli.run()
 
 

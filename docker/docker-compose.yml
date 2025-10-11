@@ -1,92 +1,107 @@
 version: '3.8'
 
 services:
-  # gRPC版本服务
-  grpc-services:
-    build:
-      context: ..
-      dockerfile: docker/Dockerfile.grpc-services
+  # 基础服务：协调器和商人
+  base-services:
+    image: distribu-town-base-services:latest
+    container_name: distribu-town-base-services
     ports:
-      - "50051:50051"  # Coordinator
-      - "50052:50052"  # Merchant
+      - "5000:5000"  # Coordinator
+      - "5001:5001"  # Merchant
     networks:
-      - distribu-town-grpc
+      - distribu-town-network
     restart: unless-stopped
+    healthcheck:
+      test: ["CMD", "curl", "-f", "http://localhost:5000/time"]
+      interval: 30s
+      timeout: 10s
+      retries: 3
+      start_period: 10s
 
-  grpc-villager-1:
-    build:
-      context: ..
-      dockerfile: docker/Dockerfile.grpc-villager
-    ports:
-      - "50053:50053"
-    environment:
-      - VILLAGER_PORT=50053
-    networks:
-      - distribu-town-grpc
-    depends_on:
-      - grpc-services
-    restart: unless-stopped
-    command: ["./start_villager_mode.sh", "--port", "50053"]
-
-  grpc-villager-2:
-    build:
-      context: ..
-      dockerfile: docker/Dockerfile.grpc-villager
-    ports:
-      - "50054:50054"
-    environment:
-      - VILLAGER_PORT=50054
-    networks:
-      - distribu-town-grpc
-    depends_on:
-      - grpc-services
-    restart: unless-stopped
-    command: ["./start_villager_mode.sh", "--port", "50054"]
-
-  # REST版本服务
-  rest-services:
-    build:
-      context: ..
-      dockerfile: docker/Dockerfile.rest-services
-    ports:
-      - "5000:5000"   # Coordinator
-      - "5001:5001"   # Merchant
-    networks:
-      - distribu-town-rest
-    restart: unless-stopped
-
-  rest-villager-1:
-    build:
-      context: ..
-      dockerfile: docker/Dockerfile.rest-villager
-    ports:
-      - "5002:5002"
+  # 村民CLI节点
+  villager-cli:
+    image: distribu-town-villager-cli:latest
+    container_name: distribu-town-villager-cli
     environment:
       - VILLAGER_PORT=5002
-    networks:
-      - distribu-town-rest
-    depends_on:
-      - rest-services
-    restart: unless-stopped
-    command: ["./start_villager_mode.sh", "--port", "5002"]
-
-  rest-villager-2:
-    build:
-      context: ..
-      dockerfile: docker/Dockerfile.rest-villager
+      - VILLAGER_NODE_ID=node1
+      - COORDINATOR_HOST=base-services
+      - COORDINATOR_PORT=5000
+      - MERCHANT_HOST=base-services
+      - MERCHANT_PORT=5001
     ports:
-      - "5003:5003"
+      - "5002:5002"
+    networks:
+      - distribu-town-network
+    depends_on:
+      base-services:
+        condition: service_healthy
+    stdin_open: true
+    tty: true
+    restart: unless-stopped
+
+  # 村民AI节点1
+  villager-ai-1:
+    image: distribu-town-villager-ai:latest
+    container_name: distribu-town-villager-ai-1
     environment:
       - VILLAGER_PORT=5003
+      - VILLAGER_NODE_ID=node2
+      - COORDINATOR_HOST=base-services
+      - COORDINATOR_PORT=5000
+      - MERCHANT_HOST=base-services
+      - MERCHANT_PORT=5001
+      - AI_NAME=Alice
+      - AI_OCCUPATION=farmer
+      - AI_GENDER=female
+      - AI_PERSONALITY=勤劳的农夫
+      - AI_API_KEY=${OPENAI_API_KEY:-}
+      - AI_MODEL=gpt-4
+      - AI_USE_REACT=false
+    ports:
+      - "5003:5003"
     networks:
-      - distribu-town-rest
+      - distribu-town-network
     depends_on:
-      - rest-services
+      base-services:
+        condition: service_healthy
+    stdin_open: true
+    tty: true
     restart: unless-stopped
-    command: ["./start_villager_mode.sh", "--port", "5003"]
+
+  # 村民AI节点2
+  villager-ai-2:
+    image: distribu-town-villager-ai:latest
+    container_name: distribu-town-villager-ai-2
+    environment:
+      - VILLAGER_PORT=5004
+      - VILLAGER_NODE_ID=node3
+      - COORDINATOR_HOST=base-services
+      - COORDINATOR_PORT=5000
+      - MERCHANT_HOST=base-services
+      - MERCHANT_PORT=5001
+      - AI_NAME=Bob
+      - AI_OCCUPATION=chef
+      - AI_GENDER=male
+      - AI_PERSONALITY=聪明的厨师
+      - AI_API_KEY=${OPENAI_API_KEY:-}
+      - AI_MODEL=gpt-4
+      - AI_USE_REACT=false
+    ports:
+      - "5004:5004"
+    networks:
+      - distribu-town-network
+    depends_on:
+      base-services:
+        condition: service_healthy
+    stdin_open: true
+    tty: true
+    restart: unless-stopped
 
 networks:
-  distribu-town-grpc:
+  distribu-town-network:
     driver: bridge
-  distribu-town-rest:
-    driver: bridge
+
+volumes:
+  # 可以添加数据卷来持久化数据
+  distribu-town-data:

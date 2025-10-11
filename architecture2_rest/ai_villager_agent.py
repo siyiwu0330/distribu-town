@@ -677,7 +677,7 @@ class AIVillagerAgent:
                     print(f"[AI Agent] ✗ 无法获取node_id")
                     return False
                 
-                merchant_url = f"http://localhost:5001"
+                merchant_url = self.merchant_url
                 response = requests.get(f"{merchant_url}/trade/list",
                                       params={'node_id': my_node_id, 'type': 'pending'},
                                       timeout=10)
@@ -697,7 +697,7 @@ class AIVillagerAgent:
                     print(f"[AI Agent] ✗ 无法获取node_id")
                     return False
                 
-                merchant_url = f"http://localhost:5001"
+                merchant_url = self.merchant_url
                 response = requests.get(f"{merchant_url}/trade/list",
                                       params={'node_id': my_node_id, 'type': 'sent'},
                                       timeout=10)
@@ -760,7 +760,7 @@ class AIVillagerAgent:
                     return False
                 
                 # 通过Merchant创建交易
-                merchant_url = f"http://localhost:5001"  # Merchant默认端口
+                merchant_url = self.merchant_url  # Merchant默认端口
                 response = requests.post(f"{merchant_url}/trade/create", 
                                         json={
                                             'initiator_id': my_node_id,
@@ -806,7 +806,7 @@ class AIVillagerAgent:
                     print(f"[AI Agent] ✗ 无法获取node_id")
                     return False
                 
-                merchant_url = f"http://localhost:5001"
+                merchant_url = self.merchant_url
                 response = requests.post(f"{merchant_url}/trade/accept",
                                        json={'trade_id': trade_id, 'node_id': my_node_id}, 
                                        timeout=10)
@@ -820,7 +820,7 @@ class AIVillagerAgent:
                     print(f"[AI Agent] ✗ 无法获取node_id")
                     return False
                 
-                merchant_url = f"http://localhost:5001"
+                merchant_url = self.merchant_url
                 response = requests.post(f"{merchant_url}/trade/confirm",
                                        json={'trade_id': trade_id, 'node_id': my_node_id}, 
                                        timeout=10)
@@ -834,7 +834,7 @@ class AIVillagerAgent:
                     print(f"[AI Agent] ✗ 无法获取node_id")
                     return False
                 
-                merchant_url = f"http://localhost:5001"
+                merchant_url = self.merchant_url
                 response = requests.post(f"{merchant_url}/trade/reject",
                                        json={'trade_id': trade_id, 'node_id': my_node_id}, 
                                        timeout=10)
@@ -848,7 +848,7 @@ class AIVillagerAgent:
                     print(f"[AI Agent] ✗ 无法获取node_id")
                     return False
                 
-                merchant_url = f"http://localhost:5001"
+                merchant_url = self.merchant_url
                 response = requests.post(f"{merchant_url}/trade/cancel",
                                        json={'trade_id': trade_id, 'node_id': my_node_id}, 
                                        timeout=10)

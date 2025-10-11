@@ -1,0 +1,57 @@
+version: '3.8'
+
+# 开发环境专用的docker-compose配置
+# 支持快速启动和调试
+
+services:
+  # gRPC版本服务
+  grpc-services:
+    build:
+      context: ..
+      dockerfile: docker/Dockerfile.grpc-services
+    ports:
+      - "50051:50051"  # Coordinator
+      - "50052:50052"  # Merchant
+    networks:
+      - distribu-town-grpc
+    restart: unless-stopped
+    environment:
+      - PYTHONPATH=/app
+      - DEBUG=true
+    volumes:
+      - ../architecture1_grpc:/app/architecture1_grpc:ro
+    healthcheck:
+      test: ["CMD", "python", "-c", "import grpc; import town_pb2; import town_pb2_grpc; channel = grpc.insecure_channel('localhost:50051'); stub = town_pb2_grpc.TimeCoordinatorStub(channel); stub.ListNodes(town_pb2.Empty()); channel.close()"]
+      interval: 30s
+      timeout: 10s
+      retries: 3
+      start_period: 40s
+
+  # REST版本服务
+  rest-services:
+    build:
+      context: ..
+      dockerfile: docker/Dockerfile.rest-services
+    ports:
+      - "5000:5000"   # Coordinator
+      - "5001:5001"   # Merchant
+    networks:
+      - distribu-town-rest
+    restart: unless-stopped
+    environment:
+      - PYTHONPATH=/app
+      - DEBUG=true
+    volumes:
+      - ../architecture2_rest:/app/architecture2_rest:ro
+    healthcheck:
+      test: ["CMD", "curl", "-f", "http://localhost:5000/time"]
+      interval: 30s
+      timeout: 10s
+      retries: 3
+      start_period: 40s
+
+networks:
+  distribu-town-grpc:
+    driver: bridge
+  distribu-town-rest:
+    driver: bridge
