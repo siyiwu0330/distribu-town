@@ -32,6 +32,62 @@
   - 资源导向设计
   - 易于测试和调试
 
+## 快速开始
+
+### 1. 配置环境
+
+```bash
+# 创建conda环境
+conda env create -f environment.yml
+conda activate distribu-town
+
+# 或使用pip安装依赖
+pip install flask requests grpcio protobuf numpy matplotlib openai
+```
+
+### 2. 启动基础服务
+
+```bash
+cd architecture2_rest
+bash start_services.sh
+```
+
+这将启动：
+- **Coordinator** (端口5000) - 时间协调器
+- **Merchant** (端口5001) - 商人服务
+
+### 3. 启动村民节点
+
+```bash
+# 启动第一个村民节点
+./start_villager.sh 5002 node1
+
+# 启动第二个村民节点（新终端）
+./start_villager.sh 5003 node2
+```
+
+### 4. 连接村民节点
+
+#### 使用交互式CLI控制村民：
+
+```bash
+# 连接到node1 (端口5002)
+python interactive_cli.py --port 5002
+
+# 连接到node2 (端口5003) - 新终端
+python interactive_cli.py --port 5003
+```
+
+#### 使用AI Agent自动控制村民：
+
+```bash
+# AI控制node1
+python ai_villager_agent.py --port 5002 --react
+
+# AI控制node2 - 新终端  
+python ai_villager_agent.py --port 5003 --react
+```
+
 ## 系统架构
 
 ```
@@ -53,6 +109,37 @@
 - **性别**：男/女
 - **性格**：自定义
 - **资产**：货币和物品（木材、小麦、面包、住房）
+
+## 基本操作
+
+### 创建村民
+在CLI中输入 `create`，然后按提示输入：
+- 名字
+- 职业（farmer/chef/carpenter）
+- 性别（male/female）
+- 性格描述
+
+### 常用命令
+- `info` - 查看村民状态
+- `produce` - 生产物品
+- `buy <物品> <数量>` - 从商人购买
+- `sell <物品> <数量>` - 出售给商人
+- `sleep` - 睡眠恢复体力
+- `eat` - 吃面包恢复体力
+- `prices` - 查看商人价格
+- `help` - 查看所有命令
+
+### 村民间交易
+- `trade <节点ID> buy <物品> <数量> <价格>` - 向其他村民购买
+- `trade <节点ID> sell <物品> <数量> <价格>` - 向其他村民出售
+- `mytrades` - 查看所有交易
+- `accept <交易ID>` - 接受交易请求
+- `confirm <交易ID>` - 确认交易
+
+### 消息系统
+- `send <节点ID> <消息>` - 发送私聊消息
+- `broadcast <消息>` - 发送广播消息
+- `messages` - 查看消息列表
 
 ## 职业系统
 
@@ -90,35 +177,18 @@
 - 晚间不睡眠工作额外消耗20体力
 - 每天结束扣除10体力（饥饿）
 
-## 快速启动
+## 示例工作流程
 
-### 前置要求
-- Python 3.9+
-- Conda 环境管理器
-- 支持多终端操作
+### 典型的一天
+1. **早上**：购买种子 → 生产小麦
+2. **中午**：吃面包恢复体力 → 继续生产
+3. **晚上**：睡眠恢复体力
 
-### 环境设置
-
-```bash
-# 创建conda环境
-conda env create -f environment.yml
-
-# 激活环境
-conda activate distribu-town
-```
-
-### 交互式启动（推荐）
-
-使用交互式模式，支持多终端操作：
-
-```bash
-# 启动基础设施（协调器和商人）
-bash start_interactive.sh
-```
-
-这会启动：
-- 协调器：`http://localhost:5000`
-- 商人：`http://localhost:5001`
+### 多村民协作
+1. 农夫生产小麦
+2. 厨师购买小麦制作面包
+3. 木工建造住房
+4. 村民间进行P2P交易获得更好价格
 
 ### 创建村民节点
 
