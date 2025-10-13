@@ -1,0 +1,45 @@
+%% 2PC Trade Mechanism - State Transition Diagram
+%% This diagram shows the complete state flow of the two-phase commit trade system
+
+stateDiagram-v2
+    [*] --> PENDING: trade create<br/>(initiator)
+    
+    PENDING --> ACCEPTED: accept<br/>(target)<br/>✓ Resource validation
+    PENDING --> REJECTED: reject<br/>(target)
+    PENDING --> CANCELED: cancel<br/>(initiator)
+    
+    ACCEPTED --> CONFIRMED: confirm<br/>(both parties)
+    
+    note right of ACCEPTED
+        Wait for confirmations:
+        - initiator_confirmed
+        - target_confirmed
+        Both must be true
+    end note
+    
+    CONFIRMED --> COMPLETED: execute<br/>(system)<br/>⚛️ Atomic operation
+    
+    note right of CONFIRMED
+        Automatic execution:
+        1. Buyer pays
+        2. Seller deducts item
+        3. Buyer gets item
+        4. Seller gets money
+    end note
+    
+    COMPLETED --> [*]: Trade success
+    REJECTED --> [*]: Trade declined
+    CANCELED --> [*]: Trade withdrawn
+    
+    note left of PENDING
+        Initial state
+        - Trade details stored
+        - Waiting for response
+    end note
+    
+    note left of COMPLETED
+        Terminal state
+        - Resources transferred
+        - Trade removed
+    end note
+

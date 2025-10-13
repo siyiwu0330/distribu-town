@@ -1,0 +1,67 @@
+%% 2PC Trade Rollback Scenario
+%% Shows what happens when execution fails and rollback is triggered
+
+sequenceDiagram
+    participant Alice as Alice (Buyer)
+    participant Merchant as Merchant (Coordinator)
+    participant Bob as Bob (Seller)
+    
+    Note over Alice,Bob: Rollback Scenario: Execution fails after payment
+    
+    %% Setup
+    rect rgb(240, 240, 240)
+        Note over Merchant: Trade accepted and confirmed<br/>Status: CONFIRMED<br/>Ready to execute
+    end
+    
+    %% Atomic Execution with Failure
+    rect rgb(255, 200, 200)
+        Note right of Merchant: ⚛️ Atomic Execution (with failure)
+        
+        %% Step 1: Buyer pays (SUCCESS)
+        Merchant->>Alice: POST /trade/execute<br/>{action: "pay", amount: 21}
+        Alice->>Alice: money -= 21
+        Note right of Alice: Alice: 100 → 79 gold
+        Alice-->>Merchant: {success: true}
+        Note over Merchant: ✓ Step 1 complete
+        
+        %% Step 2: Seller deducts item (FAILURE)
+        Merchant->>Bob: POST /trade/execute<br/>{action: "remove_item", item: "wheat", qty: 3}
+        Bob->>Bob: Check inventory
+        Note right of Bob: Bob: wheat = 2<br/>❌ Not enough!
+        Bob-->>Merchant: {success: false, error: "Insufficient wheat"}
+        Note over Merchant: ❌ Step 2 failed!
+        
+        %% Rollback
+        Note over Merchant: 🔄 ROLLBACK TRIGGERED
+        
+        Merchant->>Alice: POST /trade/execute<br/>{action: "refund", amount: 21}
+        Alice->>Alice: money += 21
+        Note right of Alice: Alice: 79 → 100 gold<br/>✓ Refunded
+        Alice-->>Merchant: {success: true}
+        
+        Merchant->>Merchant: Set status: FAILED<br/>Remove from active_trades
+        Merchant-->>Alice: {success: false, message: "Trade failed"}
+        Merchant-->>Bob: {success: false, message: "Trade failed"}
+    end
+    
+    Note over Alice,Bob: ✓ Rollback Complete: All changes reverted
+
+    %% Another scenario: Rejection
+    rect rgb(255, 220, 180)
+        Note over Alice,Bob: Alternative: Early Rejection (No Rollback Needed)
+        
+        Alice->>Merchant: POST /trade/create
+        Merchant-->>Alice: {trade_id: "trade_2"}
+        Note over Merchant: Status: PENDING
+        
+        Bob->>Merchant: GET /trade/list
+        Merchant-->>Bob: {trades: [trade_2]}
+        
+        Bob->>Merchant: POST /trade/reject<br/>{trade_id: "trade_2"}
+        Note over Merchant: Status: REJECTED<br/>No resources touched
+        Merchant-->>Bob: {success: true}
+        Merchant-->>Alice: Notification: Trade rejected
+    end
+    
+    Note over Alice,Bob: No rollback needed - trade rejected before execution
+

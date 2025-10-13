@@ -1,0 +1,77 @@
+%% 2PC Trade Sequence Diagram - Successful Trade Flow
+%% Shows the complete interaction between Alice, Bob, and Merchant
+
+sequenceDiagram
+    participant Alice as Alice (Initiator)
+    participant Merchant as Merchant (Coordinator)
+    participant Bob as Bob (Target)
+    
+    Note over Alice,Bob: Successful Trade: Alice buys 3 wheat from Bob for 21 gold
+    
+    %% Phase 1: Creation
+    rect rgb(200, 220, 250)
+        Note right of Alice: PHASE 1: Trade Creation
+        Alice->>Merchant: POST /trade/create<br/>{buy, wheat, 3, 21 gold}
+        Merchant->>Merchant: Generate trade_id<br/>Status: PENDING
+        Merchant-->>Alice: {trade_id: "trade_1"}
+        Note over Merchant: Trade stored in active_trades
+    end
+    
+    %% Phase 2: Acceptance (Preparation)
+    rect rgb(220, 250, 200)
+        Note right of Bob: PHASE 2: Acceptance & Validation
+        Bob->>Merchant: GET /trade/list?type=pending
+        Merchant-->>Bob: {trades: [trade_1]}
+        Bob->>Merchant: POST /trade/accept<br/>{trade_id: "trade_1"}
+        Merchant->>Bob: GET /villager (check resources)
+        Bob-->>Merchant: {wheat: 5, money: 50}
+        Note over Merchant: ✓ Bob has 3+ wheat<br/>Status: ACCEPTED
+        Merchant-->>Bob: {success: true}
+    end
+    
+    %% Phase 3: Two-Phase Commit
+    rect rgb(250, 220, 200)
+        Note right of Bob: PHASE 3: Two-Phase Commit
+        
+        %% Bob confirms first
+        Bob->>Merchant: POST /trade/confirm<br/>{trade_id: "trade_1"}
+        Merchant->>Merchant: Set target_confirmed = true
+        Note over Merchant: Status: ACCEPTED<br/>Waiting for initiator
+        Merchant-->>Bob: {success: true, message: "Waiting..."}
+        
+        %% Alice confirms
+        Alice->>Merchant: POST /trade/confirm<br/>{trade_id: "trade_1"}
+        Merchant->>Merchant: Set initiator_confirmed = true
+        Note over Merchant: Both confirmed!<br/>Status: CONFIRMED
+        
+        %% Atomic Execution
+        Merchant->>Merchant: execute_trade()
+        
+        Note over Merchant: ⚛️ Atomic Execution Begins
+        
+        %% Step 1: Buyer pays
+        Merchant->>Alice: POST /trade/execute<br/>{action: "pay", amount: 21}
+        Alice->>Alice: money -= 21
+        Alice-->>Merchant: {success: true}
+        
+        %% Step 2: Seller deducts item
+        Merchant->>Bob: POST /trade/execute<br/>{action: "remove_item", item: "wheat", qty: 3}
+        Bob->>Bob: wheat -= 3
+        Bob-->>Merchant: {success: true}
+        
+        %% Step 3: Buyer receives item
+        Merchant->>Alice: POST /trade/execute<br/>{action: "add_item", item: "wheat", qty: 3}
+        Alice->>Alice: wheat += 3
+        Alice-->>Merchant: {success: true}
+        
+        %% Step 4: Seller receives money
+        Merchant->>Bob: POST /trade/execute<br/>{action: "add_money", amount: 21}
+        Bob->>Bob: money += 21
+        Bob-->>Merchant: {success: true}
+        
+        Note over Merchant: Status: COMPLETED<br/>Trade removed from active_trades
+        Merchant-->>Alice: {success: true, message: "Trade completed"}
+    end
+    
+    Note over Alice,Bob: ✓ Trade Complete: Alice got 3 wheat, Bob got 21 gold
+
