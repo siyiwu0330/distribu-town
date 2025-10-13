@@ -1,6 +1,6 @@
 """
-时间协调器 - Architecture 1 (gRPC)
-负责管理全局时间和同步所有节点
+TimeCoordinator - Architecture 1 (gRPC)
+负责管理全局Time和同步所有Node
 """
 
 import grpc
@@ -21,48 +21,48 @@ from common.models import GameState, TimeOfDay
 
 
 class TimeCoordinatorService(town_pb2_grpc.TimeCoordinatorServicer):
-    """时间协调器服务"""
+    """TimeCoordinator服务"""
     
     def __init__(self):
         self.game_state = GameState()
         self.registered_nodes = {}  # {node_id: NodeInfo}
-        print(f"[Coordinator] 初始化完成 - Day {self.game_state.day}, {self.game_state.time_of_day.value}")
+        print(f"[Coordinator] Initialization complete - Day {self.game_state.day}, {self.game_state.time_of_day.value}")
     
     def RegisterNode(self, request, context):
-        """注册新节点"""
+        """注册新Node"""
         node_id = request.node_id
         self.registered_nodes[node_id] = {
             'node_id': node_id,
             'node_type': request.node_type,
             'address': request.address
         }
-        print(f"[Coordinator] 节点注册: {node_id} ({request.node_type}) @ {request.address}")
+        print(f"[Coordinator] Node注册: {node_id} ({request.node_type}) @ {request.address}")
         return town_pb2.Status(
             success=True,
             message=f"Node {node_id} registered successfully"
         )
     
     def GetCurrentTime(self, request, context):
-        """获取当前时间"""
+        """获取当前Time"""
         return town_pb2.GameTime(
             day=self.game_state.day,
             time_of_day=self.game_state.time_of_day.value
         )
     
     def AdvanceTime(self, request, context):
-        """推进时间"""
+        """AdvanceTime"""
         old_time = f"Day {self.game_state.day} {self.game_state.time_of_day.value}"
         
-        # 如果是晚上到早上的转换，需要重置所有节点
+        # 如果是Evening到Morning的转换，需要重置所有Node
         is_new_day = self.game_state.time_of_day == TimeOfDay.EVENING
         
-        # 推进时间
+        # AdvanceTime
         self.game_state.advance_time()
         
         new_time = f"Day {self.game_state.day} {self.game_state.time_of_day.value}"
-        print(f"\n[Coordinator] 时间推进: {old_time} -> {new_time}")
+        print(f"\n[Coordinator] TimeAdvance: {old_time} -> {new_time}")
         
-        # 通知所有注册的节点
+        # Notify所有注册的Node
         notification = town_pb2.TimeAdvanceNotification(
             new_time=town_pb2.GameTime(
                 day=self.game_state.day,
@@ -75,7 +75,7 @@ class TimeCoordinatorService(town_pb2_grpc.TimeCoordinatorServicer):
                 if node_info['node_type'] == 'coordinator':
                     continue
                 
-                # 连接到节点并通知
+                # Connecting toNode并Notify
                 channel = grpc.insecure_channel(node_info['address'])
                 
                 if node_info['node_type'] == 'merchant':
@@ -86,9 +86,9 @@ class TimeCoordinatorService(town_pb2_grpc.TimeCoordinatorServicer):
                     stub.OnTimeAdvance(notification)
                 
                 channel.close()
-                print(f"[Coordinator] 通知节点: {node_id}")
+                print(f"[Coordinator] NotifyNode: {node_id}")
             except Exception as e:
-                print(f"[Coordinator] 通知节点 {node_id} 失败: {e}")
+                print(f"[Coordinator] NotifyNode {node_id} Failed: {e}")
         
         return town_pb2.Status(
             success=True,
@@ -96,7 +96,7 @@ class TimeCoordinatorService(town_pb2_grpc.TimeCoordinatorServicer):
         )
     
     def ListNodes(self, request, context):
-        """列出所有注册的节点"""
+        """列出所有注册的Node"""
         nodes = []
         for node_info in self.registered_nodes.values():
             nodes.append(town_pb2.NodeInfo(
@@ -108,7 +108,7 @@ class TimeCoordinatorService(town_pb2_grpc.TimeCoordinatorServicer):
 
 
 def serve(port=50051):
-    """启动协调器服务器"""
+    """启动Coordinator服务器"""
     server = grpc.server(futures.ThreadPoolExecutor(max_workers=10))
     town_pb2_grpc.add_TimeCoordinatorServicer_to_server(
         TimeCoordinatorService(), server
@@ -116,8 +116,8 @@ def serve(port=50051):
     server.add_insecure_port(f'[::]:{port}')
     server.start()
     
-    print(f"[Coordinator] 时间协调器启动在端口 {port}")
-    print("[Coordinator] 等待节点注册...")
+    print(f"[Coordinator] TimeCoordinatorstarting on port {port}")
+    print("[Coordinator] WaitingNode注册...")
     print("[Coordinator] 使用 Ctrl+C 停止服务器")
     
     try:
@@ -130,7 +130,7 @@ def serve(port=50051):
 
 if __name__ == '__main__':
     import argparse
-    parser = argparse.ArgumentParser(description='时间协调器服务')
+    parser = argparse.ArgumentParser(description='TimeCoordinator服务')
     parser.add_argument('--port', type=int, default=50051, help='监听端口')
     args = parser.parse_args()
     

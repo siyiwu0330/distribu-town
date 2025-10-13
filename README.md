@@ -1,98 +1,98 @@
-# 分布式虚拟小镇 (Distributed Virtual Town)
+# Distributed Virtual Town
 
-一个分布式多智能体虚拟小镇模拟系统，实现了两种不同的系统架构和通信模型。支持多终端交互式操作，每个村民作为独立的节点运行，可以进行生产、交易、时间同步等活动。
+A distributed multi-agent virtual town simulation system implementing two different system architectures and communication models. Supports multi-terminal interactive operations, where each villager runs as an independent node and can engage in production, trading, time synchronization, and other activities.
 
-## 项目概述
+## Project Overview
 
-这是一个模拟虚拟小镇的分布式系统，每个村民作为独立的节点运行。村民有不同的职业（农夫、厨师、木工），可以进行生产、交易等活动。系统实现了全局时间同步和资源管理，支持P2P村民间交易和与商人的交易。
+This is a distributed system simulating a virtual town, where each villager runs as an independent node. Villagers have different occupations (farmer, chef, carpenter) and can engage in production, trading, and other activities. The system implements global time synchronization and resource management, supporting P2P inter-villager trading and trading with merchants.
 
-## 五个功能需求
+## Five Core Features
 
-1. **村民管理** - 创建和管理虚拟村民（捏人系统）
-2. **生产系统** - 不同职业进行生产活动（木工→住房，农夫→小麦，厨师→面包）
-3. **交易系统** - 村民之间及与商人的交易，村民之间的交易
-4. **时间同步** - 全局时间管理（早中晚三个时段）
-5. **资源管理** - 管理体力、货币、物品（木材、小麦、面包、住房）
+1. **Villager Management** - Create and manage virtual villagers (character creation system)
+2. **Production System** - Different occupations perform production activities (carpenter→house, farmer→wheat, chef→bread)
+3. **Trading System** - Trading between villagers and with merchants, peer-to-peer villager trading
+4. **Time Synchronization** - Global time management (three time periods: morning, noon, evening)
+5. **Resource Management** - Manage stamina, currency, items (wood, wheat, bread, houses)
 
-## 两种系统架构
+## Two System Architectures
 
-### 架构1：微服务架构 + gRPC
-- 位置：`architecture1_grpc/`
-- 特点：
-  - 每个村民作为独立的gRPC服务
-  - 中央时间协调器管理全局时钟
-  - 使用Protocol Buffers定义消息格式
-  - 高效的二进制通信
+### Architecture 1: Microservices + gRPC
+- Location: `architecture1_grpc/`
+- Features:
+  - Each villager as an independent gRPC service
+  - Central time coordinator manages global clock
+  - Uses Protocol Buffers for message format
+  - Efficient binary communication
 
-### 架构2：RESTful资源导向 + HTTP
-- 位置：`architecture2_rest/`
-- 特点：
-  - 每个村民暴露REST API端点
-  - 使用HTTP JSON进行通信
-  - 资源导向设计
-  - 易于测试和调试
+### Architecture 2: RESTful Resource-Oriented + HTTP
+- Location: `architecture2_rest/`
+- Features:
+  - Each villager exposes REST API endpoints
+  - Uses HTTP JSON for communication
+  - Resource-oriented design
+  - Easy to test and debug
 
-## 快速开始
+## Quick Start
 
-### 1. 配置环境
+### 1. Setup Environment
 
 ```bash
-# 创建conda环境
+# Create conda environment
 conda env create -f environment.yml
 conda activate distribu-town
 
-# 或使用pip安装依赖
+# Or install dependencies with pip
 pip install flask requests grpcio protobuf numpy matplotlib openai
 ```
 
-### 2. 启动基础服务
+### 2. Start Base Services
 
 ```bash
 cd architecture2_rest
 bash start_services.sh
 ```
 
-这将启动：
-- **Coordinator** (端口5000) - 时间协调器
-- **Merchant** (端口5001) - 商人服务
+This will start:
+- **Coordinator** (port 5000) - Time coordinator
+- **Merchant** (port 5001) - Merchant service
 
-### 3. 启动村民节点
+### 3. Start Villager Nodes
 
 ```bash
-# 启动第一个村民节点
+# Start first villager node
 ./start_villager.sh 5002 node1
 
-# 启动第二个村民节点（新终端）
+# Start second villager node (new terminal)
 ./start_villager.sh 5003 node2
 ```
 
-### 4. 连接村民节点
+### 4. Connect to Villager Nodes
 
-#### 使用交互式CLI控制村民：
+#### Using Interactive CLI to Control Villagers:
 
 ```bash
-# 连接到node1 (端口5002)
+# Connect to node1 (port 5002)
 python interactive_cli.py --port 5002
 
-# 连接到node2 (端口5003) - 新终端
+# Connect to node2 (port 5003) - new terminal
 python interactive_cli.py --port 5003
 ```
 
-#### 使用AI Agent自动控制村民：
+#### Using AI Agent to Automatically Control Villagers:
 
 ```bash
-# AI控制node1
+# AI controls node1
 python ai_villager_agent.py --port 5002 --react
 
-# AI控制node2 - 新终端  
+# AI controls node2 - new terminal  
 python ai_villager_agent.py --port 5003 --react
 ```
 
-## 系统架构
+## System Architecture
 
 ```
 ┌─────────────────┐
-│ Time Coordinator│ (同步各节点的时间)
+│ Time Coordinator│ (Synchronizes time across nodes)
 └────────┬────────┘
          │
     ┌────┴────┬────────┬────────┐
@@ -102,342 +102,340 @@ python ai_villager_agent.py --port 5003 --react
 └────────┘ └──────┘ └──────┘ └────────┘
 ```
 
-## 村民属性
+## Villager Attributes
 
-- **体力**：0-100，每天因饥饿-10，工作消耗，睡眠恢复
-- **职业**：木工、农夫、厨师（商人为系统NPC）
-- **性别**：男/女
-- **性格**：自定义
-- **资产**：货币和物品（木材、小麦、面包、住房）
+- **Stamina**: 0-100, decreases by 10 daily from hunger, consumed by work, restored by sleep
+- **Occupation**: Carpenter, Farmer, Chef (Merchant is system NPC)
+- **Gender**: Male/Female
+- **Personality**: Customizable
+- **Assets**: Currency and items (wood, wheat, bread, houses)
 
-## 基本操作
+## Basic Operations
 
-### 创建村民
-在CLI中输入 `create`，然后按提示输入：
-- 名字
-- 职业（farmer/chef/carpenter）
-- 性别（male/female）
-- 性格描述
+### Creating a Villager
+In the CLI, enter `create`, then follow prompts to enter:
+- Name
+- Occupation (farmer/chef/carpenter)
+- Gender (male/female)
+- Personality description
 
-### 常用命令
-- `info` - 查看村民状态
-- `produce` - 生产物品
-- `buy <物品> <数量>` - 从商人购买
-- `sell <物品> <数量>` - 出售给商人
-- `sleep` - 睡眠恢复体力
-- `eat` - 吃面包恢复体力
-- `prices` - 查看商人价格
-- `help` - 查看所有命令
+### Common Commands
+- `info` - View villager status
+- `produce` - Produce items
+- `buy <item> <quantity>` - Buy from merchant
+- `sell <item> <quantity>` - Sell to merchant
+- `sleep` - Sleep to restore stamina
+- `eat` - Eat bread to restore stamina
+- `prices` - View merchant prices
+- `help` - View all commands
 
-### 村民间交易
-- `trade <节点ID> buy <物品> <数量> <价格>` - 向其他村民购买
-- `trade <节点ID> sell <物品> <数量> <价格>` - 向其他村民出售
-- `mytrades` - 查看所有交易
-- `accept <交易ID>` - 接受交易请求
-- `confirm <交易ID>` - 确认交易
+### Inter-Villager Trading
+- `trade <node_id> buy <item> <quantity> <price>` - Buy from other villager
+- `trade <node_id> sell <item> <quantity> <price>` - Sell to other villager
+- `mytrades` - View all trades
+- `accept <trade_id>` - Accept trade request
+- `confirm <trade_id>` - Confirm trade
 
-### 消息系统
-- `send <节点ID> <消息>` - 发送私聊消息
-- `broadcast <消息>` - 发送广播消息
-- `messages` - 查看消息列表
+### Messaging System
+- `send <node_id> <message>` - Send private message
+- `broadcast <message>` - Send broadcast message
+- `messages` - View message list
 
-## 职业系统
+## Occupation System
 
-### 商人（Merchant）
-- 系统NPC，固定物价
-- 提供基础资源（种子、木材）
-- 收购产品（小麦、面包）
+### Merchant
+- System NPC with fixed prices
+- Provides basic resources (seeds, wood)
+- Purchases products (wheat, bread)
 
-### 木工（Carpenter）
-- 消耗：木材 + 体力
-- 生产：住房
-- 收入：建造委托费
+### Carpenter
+- Consumes: Wood + Stamina
+- Produces: Houses
+- Income: Construction commission fees
 
-### 农夫（Farmer）
-- 消耗：种子 + 体力
-- 生产：小麦
-- 收入：出售小麦
+### Farmer
+- Consumes: Seeds + Stamina
+- Produces: Wheat
+- Income: Selling wheat
 
-### 厨师（Chef）
-- 消耗：小麦 + 体力
-- 生产：面包
-- 收入：出售面包
+### Chef
+- Consumes: Wheat + Stamina
+- Produces: Bread
+- Income: Selling bread
 
-## 时间系统
+## Time System
 
-每天分为三个时段：
-- **早晨**：1行动点
-- **中午**：1行动点
-- **晚上**：1行动点
+Each day is divided into three periods:
+- **Morning**: 1 action point
+- **Noon**: 1 action point
+- **Evening**: 1 action point
 
-规则：
-- 生产活动消耗1行动点和体力
-- 交易和吃饭不消耗行动点
-- 睡眠恢复体力（需要住房）
-- 晚间不睡眠工作额外消耗20体力
-- 每天结束扣除10体力（饥饿）
+Rules:
+- Production activities consume 1 action point and stamina
+- Trading and eating don't consume action points
+- Sleep restores stamina (requires house)
+- Working at night without sleeping costs extra 20 stamina
+- 10 stamina deducted at day end (hunger)
 
-## 示例工作流程
+## Example Workflows
 
-### 典型的一天
-1. **早上**：购买种子 → 生产小麦
-2. **中午**：吃面包恢复体力 → 继续生产
-3. **晚上**：睡眠恢复体力
+### A Typical Day
+1. **Morning**: Buy seeds → Produce wheat
+2. **Noon**: Eat bread to restore stamina → Continue production
+3. **Evening**: Sleep to restore stamina
 
-### 多村民协作
-1. 农夫生产小麦
-2. 厨师购买小麦制作面包
-3. 木工建造住房
-4. 村民间进行P2P交易获得更好价格
+### Multi-Villager Cooperation
+1. Farmer produces wheat
+2. Chef buys wheat to make bread
+3. Carpenter builds houses
+4. Villagers engage in P2P trading for better prices
 
-### 创建村民节点
+### Creating Villager Nodes
 
-在新终端中启动村民节点（每个村民一个终端）：
+Start villager nodes in new terminals (one terminal per villager):
 
 ```bash
-# 终端A：启动node1节点
+# Terminal A: Start node1
 cd /path/to/distribu-town/architecture2_rest
 conda activate distribu-town
 python villager.py --port 5002 --id node1
 
-# 终端B：启动node2节点  
+# Terminal B: Start node2
 python villager.py --port 5003 --id node2
 ```
 
-### 连接CLI控制台
+### Connecting CLI Console
 
-启动村民节点后，在另一个终端连接CLI控制：
+After starting villager nodes, connect CLI control in another terminal:
 
 ```bash
-# 控制node1（确保node1节点已启动在5002端口）
+# Control node1 (ensure node1 is running on port 5002)
 python interactive_cli.py --port 5002
 
-# 控制node2（确保node2节点已启动在5003端口）
+# Control node2 (ensure node2 is running on port 5003)
 python interactive_cli.py --port 5003
 ```
 
-## 使用指南
+## Usage Guide
 
-### CLI命令列表
+### CLI Command List
 
-在交互式CLI中，您可以使用以下命令：
+In the interactive CLI, you can use the following commands:
 
-**基本命令:**
-- `info` / `i` - 查看村民状态
-- `time` / `t` - 查看当前时间
-- `status` / `s` - 查看所有村民的提交状态
-- `prices` / `p` - 查看商人价格
-- `help` / `h` / `?` - 显示帮助
-- `quit` / `q` / `exit` - 退出
+**Basic Commands:**
+- `info` / `i` - View villager status
+- `time` / `t` - View current time
+- `status` / `s` - View all villagers' submission status
+- `prices` / `p` - View merchant prices
+- `help` / `h` / `?` - Show help
+- `quit` / `q` / `exit` - Exit
 
-**村民操作:**
-- `create` - 创建新村民
-- `produce` / `work` - 执行生产（自动提交work）
-- `sleep` / `rest` - 睡眠恢复体力（自动提交sleep）
-- `idle` - 跳过当前时段（提交idle）
-- `eat` / `e` - 吃面包恢复体力（不消耗行动，不提交）
-- `buy <物品> <数量>` - 从商人购买
-- `sell <物品> <数量>` - 出售给商人
+**Villager Operations:**
+- `create` - Create new villager
+- `produce` / `work` - Perform production (auto-submit work)
+- `sleep` / `rest` - Sleep to restore stamina (auto-submit sleep)
+- `idle` - Skip current period (submit idle)
+- `eat` / `e` - Eat bread to restore stamina (doesn't consume action, no submit)
+- `buy <item> <quantity>` - Buy from merchant
+- `sell <item> <quantity>` - Sell to merchant
 
-**村民间交易（P2P）:**
-- `trade <村民> buy <物品> <数量> <价格>` - 向其他村民购买
-- `trade <村民> sell <物品> <数量> <价格>` - 向其他村民出售
-- `trades` - 查看收到的交易请求
-- `mytrades` - 查看自己发起的交易请求
-- `accept <ID>` - 接受指定的交易请求
-- `reject <ID>` - 拒绝指定的交易请求
-- `confirm <ID>` - 确认并完成自己发起的交易
-- `cancel <ID>` - 取消自己发起的交易
+**Inter-Villager Trading (P2P):**
+- `trade <villager> buy <item> <quantity> <price>` - Buy from other villager
+- `trade <villager> sell <item> <quantity> <price>` - Sell to other villager
+- `trades` - View received trade requests
+- `mytrades` - View your initiated trade requests
+- `accept <ID>` - Accept specified trade request
+- `reject <ID>` - Reject specified trade request
+- `confirm <ID>` - Confirm and complete your initiated trade
+- `cancel <ID>` - Cancel your initiated trade
 
-### 典型工作流程
+### Typical Workflows
 
-**早上时段:**
+**Morning Period:**
 ```bash
-create                    # 创建村民（如果未创建）
-buy seed 10              # 购买种子（不消耗行动）
-produce                   # 生产小麦（自动提交work）
-# 等待其他村民提交行动...
+create                    # Create villager (if not created)
+buy seed 10              # Buy seeds (doesn't consume action)
+produce                   # Produce wheat (auto-submit work)
+# Wait for other villagers to submit actions...
 ```
 
-**中午时段:**
+**Noon Period:**
 ```bash
-eat                      # 吃面包恢复体力（不消耗行动）
-produce                  # 再次生产（自动提交work）
-# 等待其他村民提交行动...
+eat                      # Eat bread to restore stamina (doesn't consume action)
+produce                  # Produce again (auto-submit work)
+# Wait for other villagers to submit actions...
 ```
 
-**晚上时段:**
+**Evening Period:**
 ```bash
-sleep                    # 睡眠（自动提交sleep）
-# 等待其他村民提交行动...
+sleep                    # Sleep (auto-submit sleep)
+# Wait for other villagers to submit actions...
 ```
 
-**村民间交易:**
+**Inter-Villager Trading:**
 ```bash
-# 村民A发起交易
+# Villager A initiates trade
 trade node2 buy wheat 5 10
-mytrades                  # 查看发送的请求
+mytrades                  # View sent requests
 
-# 村民B查看并接受
-trades                    # 查看收到的请求
-accept trade_0            # 接受交易
+# Villager B reviews and accepts
+trades                    # View received requests
+accept trade_0            # Accept trade
 
-# 村民A完成交易
-mytrades                  # 查询交易请求是否被接受
-confirm trade_0           # 完成交易
+# Villager A completes trade
+mytrades                  # Check if trade request was accepted
+confirm trade_0           # Complete trade
 ```
 
-## 系统特性
+## System Features
 
-### 分布式时间同步
-- 使用屏障同步（Barrier Synchronization）机制
-- 所有村民必须提交行动后，时间才会推进
-- 支持早中晚三个时段的时间管理
+### Distributed Time Synchronization
+- Uses Barrier Synchronization mechanism
+- Time progresses only after all villagers submit actions
+- Supports management of three time periods (morning, noon, evening)
 
-### P2P交易系统
-- 村民间直接交易，不经过协调器
-- 支持异步交易请求和响应
-- 交易状态实时同步
+### P2P Trading System
+- Direct trading between villagers, not through coordinator
+- Supports asynchronous trade requests and responses
+- Real-time trade status synchronization
 
-### 职业生产系统
-- **农夫**: 1种子 → 5小麦 (消耗20体力)
-- **厨师**: 3小麦 → 2面包 (消耗15体力)  
-- **木工**: 10木材 → 1住房 (消耗30体力)
+### Occupation Production System
+- **Farmer**: 1 seed → 5 wheat (consumes 20 stamina)
+- **Chef**: 3 wheat → 2 bread (consumes 15 stamina)  
+- **Carpenter**: 10 wood → 1 house (consumes 30 stamina)
 
-### 物品和资源
-- **基础物品**: seed(种子), wheat(小麦), bread(面包), wood(木材), house(住房)
-- **特殊物品**: temp_room(临时房间券) - 用于睡眠
-- **体力系统**: 0-100，工作消耗，睡眠恢复
+### Items and Resources
+- **Basic Items**: seed, wheat, bread, wood, house
+- **Special Items**: temp_room (temporary room voucher) - used for sleeping
+- **Stamina System**: 0-100, consumed by work, restored by sleep
 
-## API示例
+## API Examples
 
-### REST API调用
+### REST API Calls
 
 ```bash
-# 创建村民
+# Create villager
 curl -X POST http://localhost:5002/villager \
   -H "Content-Type: application/json" \
   -d '{"name":"Alice","occupation":"farmer","gender":"female","personality":"hardworking"}'
 
-# 查询村民状态
+# Query villager status
 curl http://localhost:5002/villager
 
-# 执行生产
+# Execute production
 curl -X POST http://localhost:5002/action/produce
 
-# 与商人交易
+# Trade with merchant
 curl -X POST http://localhost:5002/action/trade \
   -H "Content-Type: application/json" \
   -d '{"target":"merchant","item":"seed","quantity":10}'
 
-# 村民间交易
+# Inter-villager trade
 curl -X POST http://localhost:5002/trade/request \
   -H "Content-Type: application/json" \
   -d '{"target":"node2","item":"wheat","quantity":5,"price":10}'
 ```
 
-## 项目结构
+## Project Structure
 
 ```
 distribu-town/
-├── architecture1_grpc/          # 架构1：微服务+gRPC
-│   ├── proto/                   # Protocol Buffer定义
-│   ├── coordinator.py           # 时间协调器
-│   ├── merchant.py              # 商人节点
-│   ├── villager.py              # 村民节点
-│   ├── client.py                # 测试客户端
+├── architecture1_grpc/          # Architecture 1: Microservices+gRPC
+│   ├── proto/                   # Protocol Buffer definitions
+│   ├── coordinator.py           # Time coordinator
+│   ├── merchant.py              # Merchant node
+│   ├── villager.py              # Villager node
+│   ├── client.py                # Test client
 │   ├── Dockerfile
 │   └── docker-compose.yml
-├── architecture2_rest/          # 架构2：RESTful+HTTP（推荐）
-│   ├── coordinator.py           # 时间协调器
-│   ├── merchant.py              # 商人节点
-│   ├── villager.py              # 村民节点
-│   ├── interactive_cli.py       # 交互式CLI客户端
-│   ├── start_demo.sh            # 演示脚本
-│   ├── test_scenario.py         # 测试场景
-│   ├── requirements.txt         # Python依赖
+├── architecture2_rest/          # Architecture 2: RESTful+HTTP (Recommended)
+│   ├── coordinator.py           # Time coordinator
+│   ├── merchant.py              # Merchant node
+│   ├── villager.py              # Villager node
+│   ├── interactive_cli.py       # Interactive CLI client
+│   ├── start_demo.sh            # Demo script
+│   ├── test_scenario.py         # Test scenarios
+│   ├── requirements.txt         # Python dependencies
 │   ├── Dockerfile
 │   └── docker-compose.yml
-├── common/                      # 公共代码
-│   └── models.py                # 数据模型
-├── performance_tests/           # 性能测试
+├── common/                      # Common code
+│   └── models.py                # Data models
+├── performance_tests/           # Performance tests
 │   ├── test_grpc.py
 │   ├── test_rest.py
 │   └── compare_results.py
-├── environment.yml              # Conda环境配置
-├── start_interactive.sh         # 交互式启动脚本
-├── demo_interactive.md          # 交互式演示说明
-├── BARRIER_SYNC_GUIDE.md        # 屏障同步机制说明
+├── environment.yml              # Conda environment configuration
+├── start_interactive.sh         # Interactive startup script
+├── demo_interactive.md          # Interactive demo instructions
+├── BARRIER_SYNC_GUIDE.md        # Barrier synchronization mechanism guide
 └── README.md
 ```
 
-## 日志和监控
+## Logging and Monitoring
 
-系统运行时会生成以下日志文件：
-- `/tmp/coordinator.log` - 协调器日志
-- `/tmp/merchant.log` - 商人日志  
-- `/tmp/alice.log` - Alice村民日志
-- `/tmp/bob.log` - Bob村民日志
-- `/tmp/charlie.log` - Charlie村民日志
+The system generates the following log files during runtime:
+- `/tmp/coordinator.log` - Coordinator log
+- `/tmp/merchant.log` - Merchant log  
+- `/tmp/alice.log` - Alice villager log
+- `/tmp/bob.log` - Bob villager log
+- `/tmp/charlie.log` - Charlie villager log
 
-查看实时日志：
+View real-time logs:
 ```bash
 tail -f /tmp/coordinator.log
 tail -f /tmp/merchant.log
 ```
 
-## 故障排除
+## Troubleshooting
 
-### 常见问题
+### Common Issues
 
-**1. 村民节点无法启动**
+**1. Villager node fails to start**
 ```bash
-# 检查端口是否被占用
+# Check if port is occupied
 lsof -i :5002
 
-# 检查conda环境
+# Check conda environment
 conda activate distribu-town
 ```
 
-**2. CLI连接失败**
+**2. CLI connection failed**
 ```bash
-# 确保村民节点已启动
+# Ensure villager node is running
 curl http://localhost:5002/health
 
-# 检查节点状态
+# Check node status
 python interactive_cli.py --port 5002
 ```
 
-**3. 交易无法完成**
-- 确保两个村民节点都在线
-- 检查交易ID是否正确
-- 查看日志文件排查问题
+**3. Trade cannot be completed**
+- Ensure both villager nodes are online
+- Check if trade ID is correct
+- Review log files to troubleshoot
 
-**4. 时间不推进**
-- 使用`status`命令检查所有村民是否已提交行动
-- 确保所有村民节点都连接到协调器
+**4. Time doesn't progress**
+- Use `status` command to check if all villagers have submitted actions
+- Ensure all villager nodes are connected to coordinator
 
-### 调试技巧
+### Debugging Tips
 
 ```bash
-# 查看协调器状态
+# View coordinator status
 curl http://localhost:5000/status
 
-# 查看商人价格
+# View merchant prices
 curl http://localhost:5001/prices
 
-# 查看村民信息
+# View villager info
 curl http://localhost:5002/villager
 ```
 
-## 开发日志
+## Development Log
 
-使用AI工具（Claude/Cursor）协助开发：
-- 分布式系统架构设计
-- REST API和gRPC实现
-- 屏障同步机制
-- P2P交易系统
-- 交互式CLI界面
-- Docker配置优化
-
-
+Developed with AI tool assistance (Claude/Cursor):
+- Distributed system architecture design
+- REST API and gRPC implementation
+- Barrier synchronization mechanism
+- P2P trading system
+- Interactive CLI interface
+- Docker configuration optimization

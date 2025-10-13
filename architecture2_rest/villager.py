@@ -1,6 +1,6 @@
 """
-村民节点 - Architecture 2 (REST)
-每个村民作为独立的REST服务节点
+VillagerNode - Architecture 2 (REST)
+Each villager runs as an independent REST service node
 """
 
 from flask import Flask, request, jsonify
@@ -19,19 +19,19 @@ from common.models import (
 
 app = Flask(__name__)
 
-# 全局状态
+# Global state
 villager_state = {
     'node_id': None,
     'villager': None,
     'merchant_address': os.getenv('MERCHANT_HOST', 'localhost') + ':' + os.getenv('MERCHANT_PORT', '5001'),
     'coordinator_address': os.getenv('COORDINATOR_HOST', 'localhost') + ':' + os.getenv('COORDINATOR_PORT', '5000'),
-    'messages': []  # 存储接收到的消息
+    'messages': []  # store received messages
 }
 
 
 @app.route('/health', methods=['GET'])
 def health():
-    """健康检查"""
+    """Health check"""
     return jsonify({
         'status': 'healthy',
         'service': 'villager',
@@ -42,7 +42,7 @@ def health():
 
 @app.route('/villager', methods=['POST'])
 def create_villager():
-    """创建/初始化村民"""
+    """Create/initialize villager"""
     try:
         data = request.json
         occupation = Occupation(data['occupation'])
@@ -57,14 +57,14 @@ def create_villager():
         
         villager_state['villager'] = villager
         
-        print(f"[Villager-{villager_state['node_id']}] 创建村民: {villager.name}")
-        print(f"  职业: {villager.occupation.value}")
-        print(f"  性别: {villager.gender.value}")
-        print(f"  性格: {villager.personality}")
-        print(f"  体力: {villager.stamina}/{villager.max_stamina}")
-        print(f"  货币: {villager.inventory.money}")
+        print(f"[Villager-{villager_state['node_id']}] Create villager: {villager.name}")
+        print(f"  Occupation: {villager.occupation.value}")
+        print(f"  Gender: {villager.gender.value}")
+        print(f"  Personality: {villager.personality}")
+        print(f"  Stamina: {villager.stamina}/{villager.max_stamina}")
+        print(f"  Money: {villager.inventory.money}")
         
-        # 创建村民后，重新注册到协调器以更新名字和职业
+        # After creating the villager, re-register with the coordinator to update name and occupation
         coordinator_addr = villager_state.get('coordinator_address', f"{os.getenv('COORDINATOR_HOST', 'localhost')}:{os.getenv('COORDINATOR_PORT', '5000')}")
         port = villager_state.get('port')
         node_id = villager_state['node_id']
@@ -83,7 +83,7 @@ def create_villager():
                     timeout=5
                 )
                 if response.status_code == 200:
-                    print(f"[Villager-{node_id}] 已更新协调器: {villager.name} ({villager.occupation.value})")
+                    print(f"[Villager-{node_id}] Updated coordinator: {villager.name} ({villager.occupation.value})")
             except:
                 pass
         
@@ -102,30 +102,30 @@ def create_villager():
 
 @app.route('/villager', methods=['GET'])
 def get_villager_info():
-    """获取村民信息"""
+    """Get villager information"""
     if not villager_state['villager']:
         return jsonify({
             'success': False,
             'message': 'Villager not initialized'
         }), 400
     
-    # 返回村民信息，包含节点ID
+    # Return villager info including node_id
     villager_data = villager_state['villager'].to_dict()
     villager_data['node_id'] = villager_state['node_id']
     return jsonify(villager_data)
 
 
 def _submit_action_internal(action: str) -> dict:
-    """内部函数：提交行动到协调器（同步屏障）"""
+    """Internal function: submit action to coordinator (synchronization barrier)"""
     villager = villager_state['villager']
     
     if not villager:
         return {'success': False, 'message': 'Villager not initialized'}
     
-    # 标记已提交行动
+    # Mark action as submitted
     villager.has_submitted_action = True
     
-    # 提交到协调器
+    # Submit to coordinator
     try:
         coordinator_addr = villager_state['coordinator_address']
         response = requests.post(
@@ -141,40 +141,40 @@ def _submit_action_internal(action: str) -> dict:
             result = response.json()
             
             if result.get('all_ready'):
-                # 所有人都准备好了，时间已推进
+                # Everyone is ready; time has advanced
                 return {
                     'success': True,
-                    'message': '所有村民已准备就绪，时间已推进！',
+                    'message': 'All villagers are ready, time has advanced!',
                     'all_ready': True,
                     'new_time': result.get('new_time')
                 }
             else:
-                # 还在等待其他人
+                # Still waiting for others
                 waiting_for = result.get('waiting_for', [])
                 return {
                     'success': True,
-                    'message': f"已提交'{action}'行动，等待其他村民",
+                    'message': f"Submitted '{action}' action, waiting for other villagers",
                     'all_ready': False,
                     'waiting_for': waiting_for
                 }
         else:
-            return {'success': False, 'message': f'协调器返回错误: {response.status_code}'}
+            return {'success': False, 'message': f'Coordinator returned error: {response.status_code}'}
     
     except Exception as e:
-        return {'success': False, 'message': f'提交失败: {str(e)}'}
+        return {'success': False, 'message': f'Failed to submit: {str(e)}'}
 
 
 @app.route('/action/submit', methods=['POST'])
 def submit_action():
-    """提交行动到协调器（同步屏障）"""
+    """Submit action to coordinator (synchronization barrier)"""
     villager = villager_state['villager']
     
     if not villager:
         return jsonify({'success': False, 'message': 'Villager not initialized'}), 400
     
-    # 检查是否已提交
+    # Check if already submitted
     if villager.has_submitted_action:
-        return jsonify({'success': False, 'message': '当前时段已经提交过行动'}), 400
+        return jsonify({'success': False, 'message': 'Action already submitted for the current time segment'}), 400
     
     data = request.json
     action = data.get('action', 'idle')  # work, sleep, idle
@@ -191,7 +191,7 @@ def submit_action():
                 'villager': villager.to_dict()
             })
         else:
-            # 还在等待其他人
+            # Still waiting for others
             waiting_for = result.get('waiting_for', [])
             return jsonify({
                 'success': True,
@@ -201,63 +201,63 @@ def submit_action():
                 'villager': villager.to_dict()
             })
     else:
-        return jsonify({'success': False, 'message': result.get('message', '提交行动失败')}), 500
+        return jsonify({'success': False, 'message': result.get('message', 'Failed to submit action')}), 500
 
 
 @app.route('/action/produce', methods=['POST'])
 def produce():
-    """执行生产（完成后自动提交work）"""
+    """Execute production (auto-submit 'work')"""
     villager = villager_state['villager']
     
     if not villager:
         return jsonify({'success': False, 'message': 'Villager not initialized'}), 400
     
-    # 检查当前时段是否已提交行动
+    # Check if action already submitted for this time segment
     if villager.has_submitted_action:
-        return jsonify({'success': False, 'message': '当前时段已经提交过行动，请等待时间推进'}), 400
+        return jsonify({'success': False, 'message': 'Action already submitted for the current time segment; please wait for time to advance'}), 400
     
-    # 获取生产配方
+    # Get production recipe
     recipe = PRODUCTION_RECIPES.get(villager.occupation)
     if not recipe:
         return jsonify({
             'success': False,
-            'message': f'职业 {villager.occupation.value} 没有生产配方'
+            'message': f'No production recipe for occupation {villager.occupation.value}'
         }), 400
     
-    # 检查是否有足够资源
+    # Check if there are enough resources
     if not recipe.can_produce(villager.inventory, villager.stamina):
         missing_items = []
         for item, qty in recipe.input_items.items():
             if not villager.inventory.has_item(item, qty):
                 have = villager.inventory.items.get(item, 0)
-                missing_items.append(f"{item} (需要{qty}, 拥有{have})")
+                missing_items.append(f"{item} (requires {qty}, have {have})")
         
         if villager.stamina < recipe.stamina_cost:
-            missing_items.append(f"体力不足 (需要{recipe.stamina_cost}, 剩余{villager.stamina})")
+            missing_items.append(f"Insufficient stamina (requires {recipe.stamina_cost}, remaining {villager.stamina})")
         
         return jsonify({
             'success': False,
-            'message': f"资源不足: {', '.join(missing_items)}"
+            'message': f"Insufficient resources: {', '.join(missing_items)}"
         }), 400
     
-    # 消耗资源
+    # Consume resources
     for item, quantity in recipe.input_items.items():
         villager.inventory.remove_item(item, quantity)
     
     villager.consume_stamina(recipe.stamina_cost)
     
-    # 生产产出
+    # Production output
     villager.inventory.add_item(recipe.output_item, recipe.output_quantity)
     
-    print(f"[Villager-{villager_state['node_id']}] {villager.name} 生产了 {recipe.output_quantity}x {recipe.output_item}")
-    print(f"  消耗体力: {recipe.stamina_cost}, 剩余: {villager.stamina}")
+    print(f"[Villager-{villager_state['node_id']}] {villager.name} produced {recipe.output_quantity}x {recipe.output_item}")
+    print(f"  Stamina used: {recipe.stamina_cost}, remaining: {villager.stamina}")
     
-    # 自动提交work行动
+    # Auto-submit 'work' action
     submit_result = _submit_action_internal('work')
     
     return jsonify({
         'success': True,
-        'message': f"生产成功: {recipe.output_quantity}x {recipe.output_item}。{submit_result.get('message', '')}",
+        'message': f"Production success: {recipe.output_quantity}x {recipe.output_item}. {submit_result.get('message', '')}",
         'villager': villager.to_dict(),
         'submit_result': submit_result
     })
@@ -265,7 +265,7 @@ def produce():
 
 @app.route('/action/trade', methods=['POST'])
 def trade():
-    """执行交易"""
+    """Execute trade"""
     villager = villager_state['villager']
     
     if not villager:
@@ -277,33 +277,33 @@ def trade():
     quantity = data['quantity']
     action = data['action']  # 'buy', 'sell', 'buy_from_villager', 'sell_to_villager'
     
-    # 如果是与商人交易
+    # Trade with merchant
     if target == 'merchant':
         return trade_with_merchant(item, quantity, action)
-    # 如果是村民间交易的自我处理
+    # Self-handling for P2P trade between villagers
     elif target == 'self':
         try:
             price = data.get('price', 0)
             
             if action == 'buy_from_villager':
-                # 从其他村民购买：扣钱，加物品
+                # Buying from another villager: deduct money, add item
                 if not villager.inventory.remove_money(price):
                     return jsonify({
                         'success': False,
-                        'message': f'货币不足 (需要{price})'
+                        'message': f'Insufficient money (requires {price})'
                     }), 400
                 villager.inventory.add_item(item, quantity)
-                print(f"[Villager-{villager_state['node_id']}] 从其他村民购买 {quantity}x {item}, 支付 {price}")
+                print(f"[Villager-{villager_state['node_id']}] Bought {quantity}x {item} from another villager, paid {price}")
                 
             elif action == 'sell_to_villager':
-                # 卖给其他村民：扣物品，加钱
+                # Selling to another villager: deduct item, add money
                 if not villager.inventory.remove_item(item, quantity):
                     return jsonify({
                         'success': False,
-                        'message': f'物品不足'
+                        'message': f'Insufficient item(s)'
                     }), 400
                 villager.inventory.add_money(price)
-                print(f"[Villager-{villager_state['node_id']}] 卖给其他村民 {quantity}x {item}, 获得 {price}")
+                print(f"[Villager-{villager_state['node_id']}] Sold {quantity}x {item} to another villager, received {price}")
             
             return jsonify({
                 'success': True,
@@ -314,35 +314,35 @@ def trade():
         except Exception as e:
             return jsonify({
                 'success': False,
-                'message': f'交易失败: {str(e)}'
+                'message': f'Trade failed: {str(e)}'
             }), 500
     else:
         return jsonify({
             'success': False,
-            'message': '请使用 trade 命令进行村民间交易'
+            'message': 'Please use the trade command for villager-to-villager trades'
         }), 400
 
 
 def trade_with_merchant(item, quantity, action):
-    """与商人交易"""
+    """Trade with merchant"""
     villager = villager_state['villager']
     merchant_addr = villager_state['merchant_address']
     
     try:
         if action == 'buy':
-            # 从商人处购买
+            # Buy from merchant
             if item not in MERCHANT_PRICES['buy']:
-                return jsonify({'success': False, 'message': f'商人不出售 {item}'}), 400
+                return jsonify({'success': False, 'message': f'Merchant does not sell {item}'}), 400
             
             total_cost = MERCHANT_PRICES['buy'][item] * quantity
             
             if not villager.inventory.remove_money(total_cost):
                 return jsonify({
                     'success': False,
-                    'message': f'货币不足 (需要{total_cost}, 拥有{villager.inventory.money})'
+                    'message': f'Insufficient money (requires {total_cost}, have {villager.inventory.money})'
                 }), 400
             
-            # 调用商人服务
+            # Call merchant service
             response = requests.post(
                 f"http://{merchant_addr}/buy",
                 json={
@@ -355,34 +355,34 @@ def trade_with_merchant(item, quantity, action):
             
             if response.status_code == 200:
                 villager.inventory.add_item(item, quantity)
-                print(f"[Villager-{villager_state['node_id']}] {villager.name} 从商人处购买 {quantity}x {item}, 花费 {total_cost}")
+                print(f"[Villager-{villager_state['node_id']}] {villager.name} bought {quantity}x {item} from merchant, cost {total_cost}")
                 return jsonify({
                     'success': True,
-                    'message': f'购买成功: {quantity}x {item}, 花费 {total_cost}',
+                    'message': f'Purchase successful: {quantity}x {item}, cost {total_cost}',
                     'villager': villager.to_dict()
                 })
             else:
-                # 退款
+                # Refund
                 villager.inventory.add_money(total_cost)
                 return jsonify({
                     'success': False,
-                    'message': f'购买失败: {response.json().get("message", "Unknown error")}'
+                    'message': f'Purchase failed: {response.json().get("message", "Unknown error")}'
                 }), 400
         
         elif action == 'sell':
-            # 出售给商人
+            # Sell to merchant
             if item not in MERCHANT_PRICES['sell']:
-                return jsonify({'success': False, 'message': f'商人不收购 {item}'}), 400
+                return jsonify({'success': False, 'message': f'Merchant does not buy {item}'}), 400
             
             if not villager.inventory.has_item(item, quantity):
                 return jsonify({
                     'success': False,
-                    'message': f'物品不足: {item} (需要{quantity})'
+                    'message': f'Insufficient item(s): {item} (requires {quantity})'
                 }), 400
             
             total_income = MERCHANT_PRICES['sell'][item] * quantity
             
-            # 调用商人服务
+            # Call merchant service
             response = requests.post(
                 f"http://{merchant_addr}/sell",
                 json={
@@ -396,69 +396,69 @@ def trade_with_merchant(item, quantity, action):
             if response.status_code == 200:
                 villager.inventory.remove_item(item, quantity)
                 villager.inventory.add_money(total_income)
-                print(f"[Villager-{villager_state['node_id']}] {villager.name} 向商人出售 {quantity}x {item}, 获得 {total_income}")
+                print(f"[Villager-{villager_state['node_id']}] {villager.name} sold {quantity}x {item} to merchant, received {total_income}")
                 return jsonify({
                     'success': True,
-                    'message': f'出售成功: {quantity}x {item}, 获得 {total_income}',
+                    'message': f'Sale successful: {quantity}x {item}, received {total_income}',
                     'villager': villager.to_dict()
                 })
             else:
                 return jsonify({
                     'success': False,
-                    'message': f'出售失败: {response.json().get("message", "Unknown error")}'
+                    'message': f'Sale failed: {response.json().get("message", "Unknown error")}'
                 }), 400
     
     except Exception as e:
         return jsonify({
             'success': False,
-            'message': f'交易失败: {str(e)}'
+            'message': f'Trade failed: {str(e)}'
         }), 500
 
 
 @app.route('/action/sleep', methods=['POST'])
 def sleep():
-    """睡眠（完成后自动提交sleep）"""
+    """Sleep (auto-submit 'sleep' after completion)"""
     villager = villager_state['villager']
     
     if not villager:
         return jsonify({'success': False, 'message': 'Villager not initialized'}), 400
     
-    # 检查当前时段是否已提交行动
+    # Check if action already submitted for this time segment
     if villager.has_submitted_action:
-        return jsonify({'success': False, 'message': '当前时段已经提交过行动，请等待时间推进'}), 400
+        return jsonify({'success': False, 'message': 'Action already submitted for the current time segment; please wait for time to advance'}), 400
     
     if villager.has_slept:
-        return jsonify({'success': False, 'message': '今天已经睡过了'}), 400
+        return jsonify({'success': False, 'message': 'Already slept today'}), 400
     
-    # 检查是否有房子或临时房间券
+    # Check for house or temporary room voucher
     has_house = villager.inventory.has_item("house", 1)
     has_temp_room = villager.inventory.has_item("temp_room", 1)
     
     if not has_house and not has_temp_room:
         return jsonify({
             'success': False,
-            'message': '没有房子或临时房间券，无法睡眠。请从商人处购买临时房间券或建造房子。'
+            'message': 'No house or temporary room voucher, cannot sleep. Please buy a temporary room voucher from the merchant or build a house.'
         }), 400
     
-    # 预处理睡眠（恢复在这里执行）
+    # Pre-handle sleep (restoration happens here)
     sleep_message = ""
     if has_house:
-        sleep_message = "在自己的房子里睡眠"
+        sleep_message = "Slept in own house"
     else:  # has_temp_room
-        sleep_message = "使用临时房间券睡眠（将在每日结算时消耗）"
+        sleep_message = "Used a temporary room voucher to sleep (will be consumed at daily settlement)"
     
     villager.restore_stamina(SLEEP_STAMINA)
     villager.has_slept = True
     
-    print(f"[Villager-{villager_state['node_id']}] {villager.name} {sleep_message}，恢复体力 {SLEEP_STAMINA}")
-    print(f"  当前体力: {villager.stamina}/{villager.max_stamina}")
+    print(f"[Villager-{villager_state['node_id']}] {villager.name} {sleep_message}, restored stamina {SLEEP_STAMINA}")
+    print(f"  Current stamina: {villager.stamina}/{villager.max_stamina}")
     
-    # 自动提交sleep行动
+    # Auto-submit sleep action
     submit_result = _submit_action_internal('sleep')
     
     return jsonify({
         'success': True,
-        'message': f'睡眠成功，恢复体力 {SLEEP_STAMINA}。{sleep_message}。{submit_result.get("message", "")}',
+        'message': f'Sleep successful, restored {SLEEP_STAMINA} stamina. {sleep_message}. {submit_result.get("message", "")}',
         'villager': villager.to_dict(),
         'submit_result': submit_result
     })
@@ -466,7 +466,7 @@ def sleep():
 
 @app.route('/action/eat', methods=['POST'])
 def eat_food():
-    """吃面包恢复体力"""
+    """Eat bread to restore stamina"""
     villager = villager_state['villager']
     
     if not villager:
@@ -475,33 +475,33 @@ def eat_food():
     if not villager.inventory.has_item("bread", 1):
         return jsonify({
             'success': False,
-            'message': '没有面包可以吃'
+            'message': 'No bread available to eat'
         }), 400
     
-    # 吃面包
+    # Eat bread
     old_stamina = villager.stamina
     success = villager.eat_bread()
     
     if success:
         restored = villager.stamina - old_stamina
-        print(f"[Villager-{villager_state['node_id']}] {villager.name} 吃了面包，恢复 {restored} 体力")
-        print(f"  当前体力: {villager.stamina}/{villager.max_stamina}")
+        print(f"[Villager-{villager_state['node_id']}] {villager.name} ate bread and restored {restored} stamina")
+        print(f"  Current stamina: {villager.stamina}/{villager.max_stamina}")
         
         return jsonify({
             'success': True,
-            'message': f'吃了面包，恢复 {restored} 体力',
+            'message': f'Ate bread and restored {restored} stamina',
             'villager': villager.to_dict()
         })
     else:
         return jsonify({
             'success': False,
-            'message': '吃面包失败'
+            'message': 'Failed to eat bread'
         }), 400
 
 
 @app.route('/trade/request', methods=['POST'])
 def receive_trade_request():
-    """接收来自其他村民的交易请求（新系统：资源锁定）"""
+    """Receive a trade request from another villager (new system: resource locking)"""
     villager = villager_state['villager']
     
     if not villager:
@@ -514,15 +514,15 @@ def receive_trade_request():
     price = data['price']
     offer_type = data['offer_type']  # 'buy' or 'sell'
     
-    # 打印交易请求
+    # Log the trade request
     if offer_type == 'buy':
-        print(f"\n[Villager-{villager_state['node_id']}] 收到交易请求:")
-        print(f"  {from_villager} 想购买 {quantity}x {item}, 出价 {price}金币")
+        print(f"\n[Villager-{villager_state['node_id']}] Received trade request:")
+        print(f"  {from_villager} wants to buy {quantity}x {item} for {price} gold")
     else:
-        print(f"\n[Villager-{villager_state['node_id']}] 收到交易请求:")
-        print(f"  {from_villager} 想出售 {quantity}x {item}, 要价 {price}金币")
+        print(f"\n[Villager-{villager_state['node_id']}] Received trade request:")
+        print(f"  {from_villager} wants to sell {quantity}x {item} for {price} gold")
     
-    # 存储待处理的交易请求
+    # Store pending trade request
     if 'pending_trades' not in villager_state:
         villager_state['pending_trades'] = []
     
@@ -535,10 +535,10 @@ def receive_trade_request():
         'quantity': quantity,
         'price': price,
         'offer_type': offer_type,
-        'status': 'pending',  # 等待接受
-        'locked_resources': False,  # 资源是否已锁定
-        'initiator_confirmed': False,  # 发起方是否已确认
-        'receiver_confirmed': False,  # 接收方是否已确认
+        'status': 'pending',           # waiting for accept
+        'locked_resources': False,     # whether resources are locked
+        'initiator_confirmed': False,  # whether the initiator has confirmed
+        'receiver_confirmed': False,   # whether the receiver has confirmed
         'created_at': time.time()
     })
     
@@ -551,7 +551,7 @@ def receive_trade_request():
 
 @app.route('/trade/pending', methods=['GET'])
 def get_pending_trades():
-    """获取待处理的交易请求"""
+    """Get pending trade requests"""
     if 'pending_trades' not in villager_state:
         villager_state['pending_trades'] = []
     
@@ -563,7 +563,7 @@ def get_pending_trades():
 
 @app.route('/trade/accept', methods=['POST'])
 def accept_trade():
-    """接受交易（新系统：资源锁定）"""
+    """Accept trade (new system: resource locking)"""
     villager = villager_state['villager']
     
     if not villager:
@@ -575,7 +575,7 @@ def accept_trade():
     
     trade_id = data['trade_id']
     
-    # 查找待处理的交易
+    # Find pending trade
     if 'pending_trades' not in villager_state:
         return jsonify({'success': False, 'message': 'No pending trades'}), 400
     
@@ -588,42 +588,42 @@ def accept_trade():
     if not trade:
         return jsonify({'success': False, 'message': 'Trade not found or not pending'}), 400
     
-    # 检查并锁定资源
+    # Check and lock resources
     if trade['offer_type'] == 'buy':
-        # 对方想买我的东西，我需要有物品
+        # The other party wants to buy my item; I need to have the item
         if not villager.inventory.has_item(trade['item'], trade['quantity']):
             return jsonify({
                 'success': False,
-                'message': f"物品不足: {trade['item']} (需要{trade['quantity']})"
+                'message': f"Insufficient items: {trade['item']} (requires {trade['quantity']})"
             }), 400
         
-        # 锁定物品（暂时从库存中移除）
+        # Lock item (temporarily remove from inventory)
         villager.inventory.remove_item(trade['item'], trade['quantity'])
-        print(f"[Villager-{villager_state['node_id']}] 锁定资源: {trade['quantity']}x {trade['item']}")
+        print(f"[Villager-{villager_state['node_id']}] Locked resources: {trade['quantity']}x {trade['item']}")
         
     else:
-        # 对方想卖给我，我需要有钱
+        # The other party wants to sell to me; I need to have enough money
         if villager.inventory.money < trade['price']:
             return jsonify({
                 'success': False,
-                'message': f"货币不足 (需要{trade['price']}, 拥有{villager.inventory.money})"
+                'message': f"Insufficient money (requires {trade['price']}, have {villager.inventory.money})"
             }), 400
         
-        # 锁定金币（暂时从库存中移除）
+        # Lock money (temporarily remove from inventory)
         villager.inventory.remove_money(trade['price'])
-        print(f"[Villager-{villager_state['node_id']}] 锁定资源: {trade['price']}金币")
+        print(f"[Villager-{villager_state['node_id']}] Locked resources: {trade['price']} gold")
     
-    # 更新交易状态
+    # Update trade status
     trade['status'] = 'accepted'
     trade['locked_resources'] = True
     trade['accepted_at'] = time.time()
     
-    print(f"[Villager-{villager_state['node_id']}] 交易已接受: {trade['from']} 的请求 {trade_id}")
-    print(f"[Villager-{villager_state['node_id']}] 等待双方确认交易...")
+    print(f"[Villager-{villager_state['node_id']}] Trade accepted: request {trade_id} from {trade['from']}")
+    print(f"[Villager-{villager_state['node_id']}] Waiting for both parties to confirm the trade...")
     
-    # 通知发起方交易已被接受（通过消息系统）
+    # Notify initiator that the trade has been accepted (via HTTP to their node)
     try:
-        # 发送HTTP请求给发起方，更新其sent_trades状态
+        # Send HTTP request to the initiator to update their sent_trades status
         initiator_address = trade.get('from_address')
         if initiator_address:
             update_data = {
@@ -638,14 +638,14 @@ def accept_trade():
             )
             
             if response.status_code == 200:
-                print(f"[Villager-{villager_state['node_id']}] 已通知 {trade['from']}: 交易 {trade_id} 已被接受")
+                print(f"[Villager-{villager_state['node_id']}] Notified {trade['from']}: Trade {trade_id} has been accepted")
             else:
-                print(f"[Villager-{villager_state['node_id']}] 通知发起方失败: HTTP {response.status_code}")
+                print(f"[Villager-{villager_state['node_id']}] Failed to notify initiator: HTTP {response.status_code}")
         else:
-            print(f"[Villager-{villager_state['node_id']}] 无法通知发起方: 缺少地址信息")
+            print(f"[Villager-{villager_state['node_id']}] Unable to notify initiator: missing address info")
         
     except Exception as e:
-        print(f"[Villager-{villager_state['node_id']}] 通知发起方失败: {e}")
+        print(f"[Villager-{villager_state['node_id']}] Failed to notify initiator: {e}")
     
     return jsonify({
         'success': True,
@@ -656,7 +656,7 @@ def accept_trade():
 
 @app.route('/trade/execute', methods=['POST'])
 def execute_trade_action():
-    """执行交易操作（由Merchant调用）"""
+    """Execute trade operation (called by the Merchant)"""
     villager = villager_state['villager']
     
     if not villager:
@@ -668,40 +668,40 @@ def execute_trade_action():
     
     try:
         if action == 'pay':
-            # 扣除金钱
+            # Deduct money
             amount = data['amount']
             if villager.inventory.money < amount:
                 return jsonify({'success': False, 'message': 'Not enough money'}), 400
             villager.inventory.remove_money(amount)
-            print(f"[Villager-{villager_state['node_id']}] 支付 {amount} 金币 (交易 {trade_id})")
+            print(f"[Villager-{villager_state['node_id']}] Paid {amount} gold (Trade {trade_id})")
         
         elif action == 'refund':
-            # 退款
+            # Refund money
             amount = data['amount']
             villager.inventory.add_money(amount)
-            print(f"[Villager-{villager_state['node_id']}] 退款 {amount} 金币 (交易 {trade_id})")
+            print(f"[Villager-{villager_state['node_id']}] Refunded {amount} gold (Trade {trade_id})")
         
         elif action == 'remove_item':
-            # 扣除物品
+            # Deduct item
             item = data['item']
             quantity = data['quantity']
             if not villager.inventory.has_item(item, quantity):
                 return jsonify({'success': False, 'message': f'Not enough {item}'}), 400
             villager.inventory.remove_item(item, quantity)
-            print(f"[Villager-{villager_state['node_id']}] 扣除 {quantity}x {item} (交易 {trade_id})")
+            print(f"[Villager-{villager_state['node_id']}] Removed {quantity}x {item} (Trade {trade_id})")
         
         elif action == 'add_item':
-            # 添加物品
+            # Add item
             item = data['item']
             quantity = data['quantity']
             villager.inventory.add_item(item, quantity)
-            print(f"[Villager-{villager_state['node_id']}] 获得 {quantity}x {item} (交易 {trade_id})")
+            print(f"[Villager-{villager_state['node_id']}] Received {quantity}x {item} (Trade {trade_id})")
         
         elif action == 'receive':
-            # 接收金钱
+            # Receive money
             amount = data['amount']
             villager.inventory.add_money(amount)
-            print(f"[Villager-{villager_state['node_id']}] 获得 {amount} 金币 (交易 {trade_id})")
+            print(f"[Villager-{villager_state['node_id']}] Received {amount} gold (Trade {trade_id})")
         
         else:
             return jsonify({'success': False, 'message': f'Unknown action: {action}'}), 400
@@ -709,13 +709,13 @@ def execute_trade_action():
         return jsonify({'success': True, 'message': f'Action {action} executed successfully'})
     
     except Exception as e:
-        print(f"[Villager-{villager_state['node_id']}] 执行交易操作失败: {e}")
+        print(f"[Villager-{villager_state['node_id']}] Failed to execute trade operation: {e}")
         return jsonify({'success': False, 'message': str(e)}), 500
 
 
 @app.route('/trade/confirm_notify', methods=['POST'])
 def receive_confirm_notification():
-    """接收确认通知（用于同步双方确认状态）"""
+    """Receive confirmation notification (used to sync both parties' confirmation states)"""
     data = request.json
     if not data or 'trade_id' not in data:
         return jsonify({'success': False, 'message': 'Missing trade_id'}), 400
@@ -724,9 +724,9 @@ def receive_confirm_notification():
     initiator_confirmed = data.get('initiator_confirmed', False)
     receiver_confirmed = data.get('receiver_confirmed', False)
     
-    print(f"[Villager-{villager_state.get('node_id', 'unknown')}] 收到确认通知: {trade_id}")
+    print(f"[Villager-{villager_state.get('node_id', 'unknown')}] Received confirm notification: {trade_id}")
     
-    # 更新sent_trades或pending_trades中的确认状态
+    # Update confirm state in sent_trades or pending_trades
     trade = None
     if 'sent_trades' in villager_state:
         for t in villager_state['sent_trades']:
@@ -736,7 +736,7 @@ def receive_confirm_notification():
                 if initiator_confirmed:
                     t['initiator_confirmed'] = True
                 trade = t
-                print(f"[Villager-{villager_state['node_id']}] 更新sent_trades中的确认状态")
+                print(f"[Villager-{villager_state['node_id']}] Updated confirmation state in sent_trades")
                 break
     
     if not trade and 'pending_trades' in villager_state:
@@ -747,56 +747,56 @@ def receive_confirm_notification():
                 if initiator_confirmed:
                     t['initiator_confirmed'] = True
                 trade = t
-                print(f"[Villager-{villager_state['node_id']}] 更新pending_trades中的确认状态")
+                print(f"[Villager-{villager_state['node_id']}] Updated confirmation state in pending_trades")
                 break
     
     if not trade:
         return jsonify({'success': False, 'message': 'Trade not found'}), 400
     
-    print(f"[Villager-{villager_state['node_id']}] DEBUG: confirm_notify确认状态检查")
+    print(f"[Villager-{villager_state['node_id']}] DEBUG: confirm_notify confirmation state check")
     print(f"[Villager-{villager_state['node_id']}] DEBUG: initiator_confirmed = {trade.get('initiator_confirmed', False)}")
     print(f"[Villager-{villager_state['node_id']}] DEBUG: receiver_confirmed = {trade.get('receiver_confirmed', False)}")
     
-    # 检查是否双方都已确认，如果是则完成交易
+    # If both parties confirmed, complete the trade
     if trade.get('initiator_confirmed') and trade.get('receiver_confirmed'):
-        # 检查交易是否已经完成（避免双重结算）
+        # Check if trade already completed (avoid double settlement)
         if trade.get('status') == 'completed':
-            print(f"[Villager-{villager_state['node_id']}] 交易已完成（已结算过），跳过")
+            print(f"[Villager-{villager_state['node_id']}] Trade already completed (already settled), skipping")
             return jsonify({'success': True, 'message': 'Trade already completed'})
         
-        print(f"[Villager-{villager_state['node_id']}] 双方已确认，执行交易结算")
+        print(f"[Villager-{villager_state['node_id']}] Both confirmed, executing trade settlement")
         
         villager = villager_state['villager']
         if not villager:
             return jsonify({'success': False, 'message': 'Villager not initialized'}), 400
         
-        # 获取交易对方的名称
+        # Get the other party’s name
         other_party = trade.get('target') or trade.get('from')
-        is_initiator = 'target' in trade  # sent_trades中有target字段，表示是发起方
+        is_initiator = 'target' in trade  # sent_trades has 'target' meaning we are initiator
         
-        # 执行资源转移（根据角色和交易类型）
+        # Execute resource transfer (by role and trade type)
         if is_initiator:
-            # 我是发起方
+            # I am the initiator
             if trade['offer_type'] == 'buy':
-                # 我发起购买，我应该获得物品
+                # I initiated a buy; I should receive items
                 villager.inventory.add_item(trade['item'], trade['quantity'])
-                print(f"[Villager-{villager_state['node_id']}] 交易完成: 从 {other_party} 购买 {trade['quantity']}x {trade['item']}, 支付 {trade['price']}金币")
+                print(f"[Villager-{villager_state['node_id']}] Trade completed: bought {trade['quantity']}x {trade['item']} from {other_party}, paid {trade['price']} gold")
             else:
-                # 我发起出售，我应该获得金钱
+                # I initiated a sell; I should receive money
                 villager.inventory.add_money(trade['price'])
-                print(f"[Villager-{villager_state['node_id']}] 交易完成: 出售 {trade['quantity']}x {trade['item']} 给 {other_party}, 获得 {trade['price']}金币")
+                print(f"[Villager-{villager_state['node_id']}] Trade completed: sold {trade['quantity']}x {trade['item']} to {other_party}, received {trade['price']} gold")
         else:
-            # 我是接收方
+            # I am the receiver
             if trade['offer_type'] == 'buy':
-                # 对方想买我的东西，我是出售方，我应该获得金钱
+                # Counterparty buys my item; I should receive money
                 villager.inventory.add_money(trade['price'])
-                print(f"[Villager-{villager_state['node_id']}] 交易完成: 出售 {trade['quantity']}x {trade['item']} 给 {other_party}, 获得 {trade['price']}金币")
+                print(f"[Villager-{villager_state['node_id']}] Trade completed: sold {trade['quantity']}x {trade['item']} to {other_party}, received {trade['price']} gold")
             else:
-                # 对方想卖给我，我是购买方，我应该获得物品
+                # Counterparty sells to me; I should receive items
                 villager.inventory.add_item(trade['item'], trade['quantity'])
-                print(f"[Villager-{villager_state['node_id']}] 交易完成: 从 {other_party} 购买 {trade['quantity']}x {trade['item']}, 支付 {trade['price']}金币")
+                print(f"[Villager-{villager_state['node_id']}] Trade completed: bought {trade['quantity']}x {trade['item']} from {other_party}, paid {trade['price']} gold")
         
-        # 清理交易记录
+        # Clean up trade records
         if 'pending_trades' in villager_state:
             villager_state['pending_trades'] = [
                 t for t in villager_state['pending_trades']
@@ -814,16 +814,16 @@ def receive_confirm_notification():
 
 @app.route('/trade/complete_notify', methods=['POST'])
 def receive_complete_notification():
-    """接收交易完成通知（标记交易为已完成，避免重复结算）"""
+    """Receive trade-completion notification (mark completed to avoid double settlement)"""
     data = request.json
     if not data or 'trade_id' not in data:
         return jsonify({'success': False, 'message': 'Missing trade_id'}), 400
     
     trade_id = data['trade_id']
     
-    print(f"[Villager-{villager_state.get('node_id', 'unknown')}] 收到交易完成通知: {trade_id}")
+    print(f"[Villager-{villager_state.get('node_id', 'unknown')}] Received trade completion notification: {trade_id}")
     
-    # 在sent_trades或pending_trades中标记为已完成
+    # Mark as completed in sent_trades or pending_trades
     trade_found = False
     
     if 'sent_trades' in villager_state:
@@ -831,7 +831,7 @@ def receive_complete_notification():
             if t['trade_id'] == trade_id:
                 t['status'] = 'completed'
                 trade_found = True
-                print(f"[Villager-{villager_state['node_id']}] 标记sent_trades中的交易为已完成")
+                print(f"[Villager-{villager_state['node_id']}] Marked trade as completed in sent_trades")
                 break
     
     if not trade_found and 'pending_trades' in villager_state:
@@ -839,7 +839,7 @@ def receive_complete_notification():
             if t['trade_id'] == trade_id:
                 t['status'] = 'completed'
                 trade_found = True
-                print(f"[Villager-{villager_state['node_id']}] 标记pending_trades中的交易为已完成")
+                print(f"[Villager-{villager_state['node_id']}] Marked trade as completed in pending_trades")
                 break
     
     return jsonify({'success': True, 'message': 'Completion notification received'})
@@ -847,39 +847,39 @@ def receive_complete_notification():
 
 @app.route('/trade/status_update', methods=['POST'])
 def update_trade_status():
-    """更新交易状态（用于发起方更新sent_trades）"""
+    """Update trade status (used by initiator to update sent_trades)"""
     data = request.json
     if not data or 'trade_id' not in data or 'status' not in data:
-        print(f"[Villager-{villager_state.get('node_id', 'unknown')}] 状态更新失败: 缺少参数")
+        print(f"[Villager-{villager_state.get('node_id', 'unknown')}] Status update failed: missing params")
         return jsonify({'success': False, 'message': 'Missing trade_id or status'}), 400
     
     trade_id = data['trade_id']
     new_status = data['status']
     
-    print(f"[Villager-{villager_state.get('node_id', 'unknown')}] 收到状态更新请求: {trade_id} -> {new_status}")
+    print(f"[Villager-{villager_state.get('node_id', 'unknown')}] Received status update: {trade_id} -> {new_status}")
     
-    # 更新sent_trades中的状态
+    # Update status in sent_trades
     if 'sent_trades' in villager_state:
-        print(f"[Villager-{villager_state.get('node_id', 'unknown')}] sent_trades内容: {villager_state['sent_trades']}")
+        print(f"[Villager-{villager_state.get('node_id', 'unknown')}] sent_trades content: {villager_state['sent_trades']}")
         for trade in villager_state['sent_trades']:
             if trade['trade_id'] == trade_id:
                 trade['status'] = new_status
-                # 同步确认状态字段
+                # Sync confirmation flags
                 if new_status == 'accepted':
                     trade['receiver_confirmed'] = True
-                print(f"[Villager-{villager_state['node_id']}] 更新交易状态: {trade_id} -> {new_status}")
+                print(f"[Villager-{villager_state['node_id']}] Updated trade status: {trade_id} -> {new_status}")
                 return jsonify({'success': True, 'message': 'Trade status updated'})
         
-        print(f"[Villager-{villager_state.get('node_id', 'unknown')}] 未找到交易: {trade_id}")
+        print(f"[Villager-{villager_state.get('node_id', 'unknown')}] Trade not found: {trade_id}")
     else:
-        print(f"[Villager-{villager_state.get('node_id', 'unknown')}] sent_trades不存在")
+        print(f"[Villager-{villager_state.get('node_id', 'unknown')}] sent_trades does not exist")
     
     return jsonify({'success': False, 'message': 'Trade not found in sent_trades'}), 400
 
 
 @app.route('/trade/confirm', methods=['POST'])
 def confirm_trade():
-    """确认交易（新系统：双方确认）"""
+    """Confirm trade (new system: both parties confirm)"""
     villager = villager_state['villager']
     
     if not villager:
@@ -891,7 +891,7 @@ def confirm_trade():
     
     trade_id = data['trade_id']
     
-    # 查找已接受的交易（在pending_trades中查找）
+    # Find accepted trade (first look in pending_trades)
     trade = None
     if 'pending_trades' in villager_state:
         for t in villager_state['pending_trades']:
@@ -899,55 +899,53 @@ def confirm_trade():
                 trade = t
                 break
     
-    # 如果没找到，可能是发起方在确认自己发起的交易
+    # If not found, maybe the initiator is confirming a trade they initiated
     if not trade and 'sent_trades' in villager_state:
-        print(f"[Villager-{villager_state['node_id']}] DEBUG: 在sent_trades中查找交易 {trade_id}")
-        print(f"[Villager-{villager_state['node_id']}] DEBUG: sent_trades内容: {villager_state['sent_trades']}")
+        print(f"[Villager-{villager_state['node_id']}] DEBUG: Searching trade {trade_id} in sent_trades")
+        print(f"[Villager-{villager_state['node_id']}] DEBUG: sent_trades content: {villager_state['sent_trades']}")
         for t in villager_state['sent_trades']:
             if t['trade_id'] == trade_id and t.get('status') == 'accepted':
                 trade = t
-                print(f"[Villager-{villager_state['node_id']}] DEBUG: 在sent_trades中找到交易 {trade_id}")
+                print(f"[Villager-{villager_state['node_id']}] DEBUG: Found trade {trade_id} in sent_trades")
                 break
     
     if not trade:
         return jsonify({'success': False, 'message': 'Trade not found or not accepted'}), 400
     
-    # 确定当前用户是发起方还是接收方
-    # 如果交易在sent_trades中，当前用户是发起方
-    # 如果交易在pending_trades中，当前用户是接收方
-    is_initiator = 'target' in trade  # sent_trades中有target字段，表示当前用户是发起方
+    # Determine whether current villager is initiator or receiver
+    # In sent_trades -> initiator; in pending_trades -> receiver
+    is_initiator = 'target' in trade  # sent_trades has 'target' when current user is initiator
     
-    # 更新确认状态
+    # Update confirmation state
     if is_initiator:
-        # 发起方确认交易，需要锁定资源
+        # Initiator confirms and must lock resources
         if trade['offer_type'] == 'buy':
-            # 我发起购买，需要锁定金币
+            # I initiated a buy, need to lock gold
             if villager.inventory.money < trade['price']:
                 return jsonify({
                     'success': False,
-                    'message': f"货币不足 (需要{trade['price']}, 拥有{villager.inventory.money})"
+                    'message': f"Insufficient money (requires {trade['price']}, have {villager.inventory.money})"
                 }), 400
             villager.inventory.remove_money(trade['price'])
-            print(f"[Villager-{villager_state['node_id']}] 锁定资源: {trade['price']}金币")
+            print(f"[Villager-{villager_state['node_id']}] Locked resources: {trade['price']} gold")
         else:
-            # 我发起出售，需要锁定物品
+            # I initiated a sell, need to lock items
             if not villager.inventory.has_item(trade['item'], trade['quantity']):
                 return jsonify({
                     'success': False,
-                    'message': f"物品不足: {trade['item']} (需要{trade['quantity']})"
+                    'message': f"Insufficient items: {trade['item']} (requires {trade['quantity']})"
                 }), 400
             villager.inventory.remove_item(trade['item'], trade['quantity'])
-            print(f"[Villager-{villager_state['node_id']}] 锁定资源: {trade['quantity']}x {trade['item']}")
+            print(f"[Villager-{villager_state['node_id']}] Locked resources: {trade['quantity']}x {trade['item']}")
         
         trade['initiator_confirmed'] = True
         trade['locked_resources'] = True
-        print(f"[Villager-{villager_state['node_id']}] 发起方确认交易: {trade_id}")
+        print(f"[Villager-{villager_state['node_id']}] Initiator confirmed trade: {trade_id}")
         
-        # 通知接收方：发起方已确认
+        # Notify receiver that initiator has confirmed
         try:
-            receiver_address = trade.get('target_address')  # sent_trades中使用target_address
+            receiver_address = trade.get('target_address')  # sent_trades uses target_address
             if receiver_address:
-                # 发送确认通知给接收方
                 confirm_data = {
                     'trade_id': trade_id,
                     'initiator_confirmed': True
@@ -958,18 +956,18 @@ def confirm_trade():
                     timeout=5
                 )
                 if response.status_code == 200:
-                    print(f"[Villager-{villager_state['node_id']}] 已通知接收方: 发起方已确认交易 {trade_id}")
+                    print(f"[Villager-{villager_state['node_id']}] Notified receiver: initiator confirmed trade {trade_id}")
                 else:
-                    print(f"[Villager-{villager_state['node_id']}] 通知接收方失败: HTTP {response.status_code}")
+                    print(f"[Villager-{villager_state['node_id']}] Failed to notify receiver: HTTP {response.status_code}")
             else:
-                print(f"[Villager-{villager_state['node_id']}] 警告: 无法获取接收方地址")
+                print(f"[Villager-{villager_state['node_id']}] Warning: receiver address missing")
         except Exception as e:
-            print(f"[Villager-{villager_state['node_id']}] 通知接收方失败: {e}")
+            print(f"[Villager-{villager_state['node_id']}] Failed to notify receiver: {e}")
     else:
         trade['receiver_confirmed'] = True
-        print(f"[Villager-{villager_state['node_id']}] 接收方确认交易: {trade_id}")
+        print(f"[Villager-{villager_state['node_id']}] Receiver confirmed trade: {trade_id}")
         
-        # 通知发起方：接收方已确认
+        # Notify initiator that receiver has confirmed
         try:
             initiator_address = trade.get('from_address')
             if initiator_address:
@@ -983,81 +981,78 @@ def confirm_trade():
                     timeout=5
                 )
                 if response.status_code == 200:
-                    print(f"[Villager-{villager_state['node_id']}] 已通知发起方: 接收方已确认交易 {trade_id}")
+                    print(f"[Villager-{villager_state['node_id']}] Notified initiator: receiver confirmed trade {trade_id}")
         except Exception as e:
-            print(f"[Villager-{villager_state['node_id']}] 通知发起方失败: {e}")
+            print(f"[Villager-{villager_state['node_id']}] Failed to notify initiator: {e}")
     
     trade['confirmed_at'] = time.time()
     
-    print(f"[Villager-{villager_state['node_id']}] DEBUG: 确认状态检查")
+    print(f"[Villager-{villager_state['node_id']}] DEBUG: Confirmation state check")
     print(f"[Villager-{villager_state['node_id']}] DEBUG: initiator_confirmed = {trade.get('initiator_confirmed', False)}")
     print(f"[Villager-{villager_state['node_id']}] DEBUG: receiver_confirmed = {trade.get('receiver_confirmed', False)}")
     
-    # 检查是否双方都已确认
+    # If both parties have confirmed
     if trade.get('initiator_confirmed', False) and trade.get('receiver_confirmed', False):
-        # 双方已确认，但不在这里结算
-        # 结算会在confirm_notify中执行（由后确认的一方收到通知后触发）
-        # 这里只是检查状态，如果已完成则返回
+        # Both confirmed, but settlement is not done here.
+        # Settlement happens in confirm_notify (triggered by the party who confirms second).
+        # If already completed, just return.
         if trade.get('status') == 'completed':
-            # 交易已经完成了，直接返回
-            print(f"[Villager-{villager_state['node_id']}] 交易已完成（已结算过）: {trade_id}")
+            print(f"[Villager-{villager_state['node_id']}] Trade already completed (already settled): {trade_id}")
             return jsonify({
                 'success': True,
                 'message': 'Trade already completed.',
                 'villager': villager.to_dict()
             })
         
-        # 如果还没有完成，说明这是第二个确认的人，需要执行结算
-        print(f"[Villager-{villager_state['node_id']}] 双方已确认，完成交易: {trade_id}")
+        # Not completed yet -> this is the second confirmer, perform settlement
+        print(f"[Villager-{villager_state['node_id']}] Both confirmed, completing trade: {trade_id}")
         
-        # 获取交易对方的名称（sent_trades用target，pending_trades用from）
+        # Other party’s name ('target' for sent_trades, 'from' for pending_trades)
         other_party = trade.get('target') or trade.get('from')
         is_initiator = 'target' in trade
         
-        # 执行实际的资源转移（根据角色和交易类型）
+        # Execute actual resource transfer
         if is_initiator:
-            # 我是发起方
             if trade['offer_type'] == 'buy':
-                # 我发起购买，物品已经在confirm时锁定了金币，现在接收物品
+                # I initiated buy; gold already locked on confirm; now receive items
                 villager.inventory.add_item(trade['item'], trade['quantity'])
-                print(f"[Villager-{villager_state['node_id']}] 交易完成: 从 {other_party} 购买 {trade['quantity']}x {trade['item']}, 支付 {trade['price']}金币")
+                print(f"[Villager-{villager_state['node_id']}] Trade completed: bought {trade['quantity']}x {trade['item']} from {other_party}, paid {trade['price']} gold")
             else:
-                # 我发起出售，物品已经在confirm时锁定，现在接收金钱
+                # I initiated sell; items already locked on confirm; now receive money
                 villager.inventory.add_money(trade['price'])
-                print(f"[Villager-{villager_state['node_id']}] 交易完成: 出售 {trade['quantity']}x {trade['item']} 给 {other_party}, 获得 {trade['price']}金币")
+                print(f"[Villager-{villager_state['node_id']}] Trade completed: sold {trade['quantity']}x {trade['item']} to {other_party}, received {trade['price']} gold")
         else:
-            # 我是接收方
             if trade['offer_type'] == 'buy':
-                # 对方想买我的东西，物品已经在accept时锁定，现在接收金钱
+                # Counterparty buys my item; items locked at accept; now receive money
                 villager.inventory.add_money(trade['price'])
-                print(f"[Villager-{villager_state['node_id']}] 交易完成: 出售 {trade['quantity']}x {trade['item']} 给 {other_party}, 获得 {trade['price']}金币")
+                print(f"[Villager-{villager_state['node_id']}] Trade completed: sold {trade['quantity']}x {trade['item']} to {other_party}, received {trade['price']} gold")
             else:
-                # 对方想卖给我，金币已经在accept时锁定，现在接收物品
+                # Counterparty sells to me; gold locked at accept; now receive items
                 villager.inventory.add_item(trade['item'], trade['quantity'])
-                print(f"[Villager-{villager_state['node_id']}] 交易完成: 从 {other_party} 购买 {trade['quantity']}x {trade['item']}, 支付 {trade['price']}金币")
+                print(f"[Villager-{villager_state['node_id']}] Trade completed: bought {trade['quantity']}x {trade['item']} from {other_party}, paid {trade['price']} gold")
         
-        # 标记交易为已完成
+        # Mark trade as completed
         trade['status'] = 'completed'
         trade['completed_at'] = time.time()
         
-        # 清理pending_trades中的已完成交易
+        # Clean up completed trade from pending_trades
         if 'pending_trades' in villager_state:
             villager_state['pending_trades'] = [
                 t for t in villager_state['pending_trades']
                 if t.get('trade_id') != trade_id
             ]
         
-        # 清理sent_trades中的已完成交易
+        # Clean up completed trade from sent_trades
         if 'sent_trades' in villager_state:
             villager_state['sent_trades'] = [
                 t for t in villager_state['sent_trades']
                 if t.get('trade_id') != trade_id
             ]
         
-        # 通知对方交易已完成（避免对方重复结算）
+        # Notify counterparty that trade is completed (to avoid double settlement)
         try:
             if is_initiator:
-                # 我是发起方，通知接收方
+                # I am initiator, notify receiver
                 target_address = trade.get('target_address')
                 if target_address:
                     requests.post(
@@ -1065,9 +1060,9 @@ def confirm_trade():
                         json={'trade_id': trade_id},
                         timeout=5
                     )
-                    print(f"[Villager-{villager_state['node_id']}] 已通知对方交易完成")
+                    print(f"[Villager-{villager_state['node_id']}] Notified counterparty: trade completed")
             else:
-                # 我是接收方，通知发起方
+                # I am receiver, notify initiator
                 from_address = trade.get('from_address')
                 if from_address:
                     requests.post(
@@ -1075,9 +1070,9 @@ def confirm_trade():
                         json={'trade_id': trade_id},
                         timeout=5
                     )
-                    print(f"[Villager-{villager_state['node_id']}] 已通知对方交易完成")
+                    print(f"[Villager-{villager_state['node_id']}] Notified counterparty: trade completed")
         except Exception as e:
-            print(f"[Villager-{villager_state['node_id']}] 通知对方交易完成失败: {e}")
+            print(f"[Villager-{villager_state['node_id']}] Failed to notify counterparty of completion: {e}")
         
         return jsonify({
             'success': True,
@@ -1086,7 +1081,7 @@ def confirm_trade():
             'villager': villager.to_dict()
         })
     else:
-        # 等待另一方确认
+        # Waiting for the other party to confirm
         return jsonify({
             'success': True,
             'message': 'Confirmation recorded. Waiting for the other party to confirm.',
@@ -1096,7 +1091,7 @@ def confirm_trade():
 
 @app.route('/trade/commit', methods=['POST'])
 def commit_trade():
-    """提交交易（两阶段提交 - 阶段2）"""
+    """Commit Trade (Two-phase commit - Phase 2)"""
     villager = villager_state['villager']
     
     if not villager:
@@ -1105,7 +1100,7 @@ def commit_trade():
     data = request.json
     trade_id = data['trade_id']
     
-    # 查找已准备的交易
+    # Find prepared trade
     if 'pending_trades' not in villager_state:
         return jsonify({'success': False, 'message': 'No pending trades'}), 400
     
@@ -1118,46 +1113,46 @@ def commit_trade():
     if not trade:
         return jsonify({'success': False, 'message': 'Prepared trade not found'}), 400
     
-    # 执行交易（转移资源）
+    # Execute trade (transfer resources)
     try:
         if trade['offer_type'] == 'buy':
-            # 对方想买我的物品，我是出售方
+            # Counterparty wants to buy my item; I'm the seller
             if not villager.inventory.has_item(trade['item'], trade['quantity']):
                 return jsonify({
                     'success': False,
-                    'message': f'物品不足: {trade["item"]} (需要{trade["quantity"]})'
+                    'message': f'Insufficient item: {trade["item"]} (requires {trade["quantity"]})'
                 }), 400
             
-            # 转移物品和金币
+            # Transfer items and gold
             villager.inventory.remove_item(trade['item'], trade['quantity'])
             villager.inventory.add_money(trade['price'])
             
-            print(f"[Villager-{villager_state['node_id']}] 交易完成: 出售 {trade['quantity']}x {trade['item']} 给 {trade['from']}, 获得 {trade['price']}金币")
+            print(f"[Villager-{villager_state['node_id']}] Trade completed: Sold {trade['quantity']}x {trade['item']} to {trade['from']}, gained {trade['price']} gold")
             
         else:  # offer_type == 'sell'
-            # 对方想卖给我，我是购买方
+            # Counterparty wants to sell to me; I'm the buyer
             if not villager.inventory.remove_money(trade['price']):
                 return jsonify({
                     'success': False,
-                    'message': f'货币不足 (需要{trade["price"]}, 拥有{villager.inventory.money})'
+                    'message': f'Insufficient money (requires {trade["price"]}, has {villager.inventory.money})'
                 }), 400
             
-            # 接收物品
+            # Receive item
             villager.inventory.add_item(trade['item'], trade['quantity'])
             
-            print(f"[Villager-{villager_state['node_id']}] 交易完成: 从 {trade['from']} 购买 {trade['quantity']}x {trade['item']}, 支付 {trade['price']}金币")
+            print(f"[Villager-{villager_state['node_id']}] Trade completed: Bought {trade['quantity']}x {trade['item']} from {trade['from']}, paid {trade['price']} gold")
         
-        # 标记交易为已完成
+        # Mark trade as completed
         trade['status'] = 'committed'
         trade['committed_at'] = time.time()
         
-        # 清理pending_trades中的已完成交易
+        # Clean up completed trade from pending_trades
         villager_state['pending_trades'] = [
             t for t in villager_state['pending_trades']
             if t.get('trade_id') != trade_id
         ]
         
-        print(f"[Villager-{villager_state['node_id']}] 交易提交完成: {trade['from']} 的请求 {trade_id}")
+        print(f"[Villager-{villager_state['node_id']}] Trade commit completed: request from {trade['from']} {trade_id}")
         
         return jsonify({
             'success': True,
@@ -1166,7 +1161,7 @@ def commit_trade():
         })
         
     except Exception as e:
-        print(f"[Villager-{villager_state['node_id']}] 交易提交异常: {e}")
+        print(f"[Villager-{villager_state['node_id']}] Trade commit exception: {e}")
         return jsonify({
             'success': False,
             'message': f'Trade commit failed: {str(e)}'
@@ -1175,11 +1170,11 @@ def commit_trade():
 
 @app.route('/trade/abort', methods=['POST'])
 def abort_trade():
-    """中止交易（两阶段提交 - 回滚）"""
+    """Abort Trade (Two-phase commit - rollback)"""
     data = request.json
     trade_id = data['trade_id']
     
-    # 查找待处理的交易
+    # Find pending trade
     if 'pending_trades' not in villager_state:
         return jsonify({'success': False, 'message': 'No pending trades'}), 400
     
@@ -1192,17 +1187,17 @@ def abort_trade():
     if not trade:
         return jsonify({'success': False, 'message': 'Trade not found'}), 400
     
-    # 标记交易为中止
+    # Mark trade as aborted
     trade['status'] = 'aborted'
     trade['aborted_at'] = time.time()
     
-    # 清理pending_trades中的已中止交易
+    # Clean up aborted trade from pending_trades
     villager_state['pending_trades'] = [
         t for t in villager_state['pending_trades']
         if t.get('trade_id') != trade_id
     ]
     
-    print(f"[Villager-{villager_state['node_id']}] 交易中止: {trade_id}")
+    print(f"[Villager-{villager_state['node_id']}] Trade aborted: {trade_id}")
     
     return jsonify({
         'success': True,
@@ -1212,20 +1207,20 @@ def abort_trade():
 
 @app.route('/trade/reject', methods=['POST'])
 def reject_trade():
-    """拒绝交易"""
+    """Reject Trade"""
     data = request.json
     trade_id = data['trade_id']
     
     if 'pending_trades' not in villager_state:
         return jsonify({'success': False, 'message': 'No pending trades'}), 400
     
-    # 移除交易
+    # Remove trade
     villager_state['pending_trades'] = [
         t for t in villager_state['pending_trades'] 
         if t['trade_id'] != trade_id
     ]
     
-    print(f"[Villager-{villager_state['node_id']}] 拒绝交易: {trade_id}")
+    print(f"[Villager-{villager_state['node_id']}] Trade rejected: {trade_id}")
     
     return jsonify({
         'success': True,
@@ -1235,7 +1230,7 @@ def reject_trade():
 
 @app.route('/trade/complete', methods=['POST'])
 def complete_trade():
-    """完成交易（由发起方调用）"""
+    """Complete trade (called by initiator)"""
     villager = villager_state['villager']
     
     if not villager:
@@ -1247,43 +1242,43 @@ def complete_trade():
     quantity = data['quantity']
     price = data['price']
     trade_type = data['type']  # 'buy' or 'sell'
-    trade_id = data.get('trade_id')  # 获取交易ID用于清理
+    trade_id = data.get('trade_id')  # Trade ID for cleanup
     
     try:
         if trade_type == 'buy':
-            # 对方购买我的物品
+            # Counterparty buys my item
             if not villager.inventory.has_item(item, quantity):
                 return jsonify({
                     'success': False,
-                    'message': f'物品不足: {item} (需要{quantity})'
+                    'message': f'Insufficient item: {item} (requires {quantity})'
                 }), 400
             
-            # 转移物品和金币
+            # Transfer items and gold
             villager.inventory.remove_item(item, quantity)
             villager.inventory.add_money(price)
             
-            print(f"[Villager-{villager_state['node_id']}] 交易完成: 出售 {quantity}x {item} 给 {from_node}, 获得 {price}金币")
+            print(f"[Villager-{villager_state['node_id']}] Trade completed: Sold {quantity}x {item} to {from_node}, gained {price} gold")
             
         else:  # sell
-            # 对方出售物品给我
+            # Counterparty sells items to me
             if not villager.inventory.remove_money(price):
                 return jsonify({
                     'success': False,
-                    'message': f'货币不足 (需要{price}, 拥有{villager.inventory.money})'
+                    'message': f'Insufficient money (requires {price}, has {villager.inventory.money})'
                 }), 400
             
-            # 接收物品
+            # Receive item
             villager.inventory.add_item(item, quantity)
             
-            print(f"[Villager-{villager_state['node_id']}] 交易完成: 从 {from_node} 购买 {quantity}x {item}, 支付 {price}金币")
+            print(f"[Villager-{villager_state['node_id']}] Trade completed: Bought {quantity}x {item} from {from_node}, paid {price} gold")
         
-        # 清理pending_trades中的已完成交易
+        # Clean up completed trade in pending_trades
         if 'pending_trades' in villager_state and trade_id:
             villager_state['pending_trades'] = [
                 t for t in villager_state['pending_trades']
                 if t.get('trade_id') != trade_id
             ]
-            print(f"[Villager-{villager_state['node_id']}] 已清理交易记录: {trade_id}")
+            print(f"[Villager-{villager_state['node_id']}] Cleared trade record: {trade_id}")
         
         return jsonify({
             'success': True,
@@ -1294,48 +1289,48 @@ def complete_trade():
     except Exception as e:
         return jsonify({
             'success': False,
-            'message': f'交易失败: {str(e)}'
+            'message': f'Trade failed: {str(e)}'
         }), 500
 
 
 @app.route('/time/advance', methods=['POST'])
 def on_time_advance():
-    """时间推进通知"""
+    """Time advance notification"""
     villager = villager_state['villager']
     
     if not villager:
         return jsonify({'success': True, 'message': 'No villager'})
     
     data = request.json
-    print(f"[Villager-{villager_state['node_id']}] 时间推进: Day {data['day']} {data['time_of_day']}")
+    print(f"[Villager-{villager_state['node_id']}] Time advance: Day {data['day']} {data['time_of_day']}")
     
-    # 如果是新的一天（早晨）
+    # If it's a new day (morning)
     if data['time_of_day'] == 'morning':
-        # 如果前一天晚上没睡觉，额外扣除体力
+        # If did not sleep last evening, deduct additional stamina
         if not villager.has_slept:
             villager.consume_stamina(NO_SLEEP_PENALTY)
-            print(f"[Villager-{villager_state['node_id']}] {villager.name} 昨晚没睡觉，额外消耗 {NO_SLEEP_PENALTY} 体力")
+            print(f"[Villager-{villager_state['node_id']}] {villager.name} did not sleep last night, extra {NO_SLEEP_PENALTY} stamina consumed")
         
-        # 每日重置
+        # Daily reset
         villager.reset_daily()
-        print(f"[Villager-{villager_state['node_id']}] 新的一天！")
-        print(f"  体力: {villager.stamina}/{villager.max_stamina}")
+        print(f"[Villager-{villager_state['node_id']}] A new day!")
+        print(f"  Stamina: {villager.stamina}/{villager.max_stamina}")
     else:
-        # 每个时段重置行动状态
+        # Reset action status for this time period
         villager.reset_time_period()
-        print(f"[Villager-{villager_state['node_id']}] 进入新时段")
-        print(f"  当前时段: {data['time_of_day']}")
+        print(f"[Villager-{villager_state['node_id']}] Entered a new time period")
+        print(f"  Current time of day: {data['time_of_day']}")
     
-    print(f"  可以开始新的行动（工作/睡眠/空闲）")
+    print(f"  You can start a new action (work/sleep/idle)")
     
     return jsonify({'success': True, 'message': 'Time updated'})
 
 
-# ==================== 消息系统 API ====================
+# ==================== Message System API ====================
 
 @app.route('/messages', methods=['GET'])
 def get_messages():
-    """获取所有消息"""
+    """Get all messages"""
     return jsonify({
         'success': True,
         'messages': villager_state['messages']
@@ -1344,14 +1339,14 @@ def get_messages():
 
 @app.route('/messages', methods=['POST'])
 def receive_message():
-    """接收消息（由其他节点或协调器调用）"""
+    """Receive Message (called by other nodes or Coordinator)"""
     try:
         data = request.json
         message = {
             'id': len(villager_state['messages']) + 1,
             'from': data['from'],
-            'to': data.get('to', 'all'),  # 'all' 表示广播消息
-            'type': data['type'],  # 'private' 或 'broadcast'
+            'to': data.get('to', 'all'),  # 'all' means broadcast message
+            'type': data['type'],  # 'private' or 'broadcast'
             'content': data['content'],
             'timestamp': data.get('timestamp', ''),
             'read': False
@@ -1359,11 +1354,11 @@ def receive_message():
         
         villager_state['messages'].append(message)
         
-        # 打印消息通知
+        # Print message notification
         if message['type'] == 'broadcast':
-            print(f"[Villager-{villager_state['node_id']}] 📢 收到广播消息: {message['from']}: {message['content']}")
+            print(f"[Villager-{villager_state['node_id']}] 📢 Received broadcast message: {message['from']}: {message['content']}")
         else:
-            print(f"[Villager-{villager_state['node_id']}] 💬 收到私聊消息: {message['from']}: {message['content']}")
+            print(f"[Villager-{villager_state['node_id']}] 💬 Received private message: {message['from']}: {message['content']}")
         
         return jsonify({'success': True, 'message': 'Message received'})
     
@@ -1373,12 +1368,12 @@ def receive_message():
 
 @app.route('/messages/send', methods=['POST'])
 def send_message():
-    """发送消息"""
+    """Send message"""
     try:
         data = request.json
-        target = data['target']  # 目标节点ID或'all'表示广播
+        target = data['target']  # Target node ID or 'all' means broadcast
         content = data['content']
-        message_type = data.get('type', 'private')  # 'private' 或 'broadcast'
+        message_type = data.get('type', 'private')  # 'private' or 'broadcast'
         
         villager = villager_state['villager']
         if not villager:
@@ -1387,7 +1382,7 @@ def send_message():
         sender_name = villager.name
         
         if message_type == 'broadcast':
-            # 通过协调器发送广播消息
+            # Send broadcast message via Coordinator
             coordinator_addr = villager_state['coordinator_address']
             response = requests.post(
                 f"http://{coordinator_addr}/messages/broadcast",
@@ -1400,14 +1395,14 @@ def send_message():
             )
             
             if response.status_code == 200:
-                print(f"[Villager-{villager_state['node_id']}] 📢 发送广播消息: {content}")
+                print(f"[Villager-{villager_state['node_id']}] 📢 Sent broadcast message: {content}")
                 return jsonify({'success': True, 'message': 'Broadcast message sent'})
             else:
                 return jsonify({'success': False, 'message': 'Failed to send broadcast'}), 500
         
         else:
-            # 发送点对点消息
-            # 首先从协调器获取目标节点地址
+            # Send point-to-point message
+            # First, get the target node address from the Coordinator
             coordinator_addr = villager_state['coordinator_address']
             nodes_response = requests.get(f"http://{coordinator_addr}/nodes", timeout=5)
             
@@ -1425,7 +1420,7 @@ def send_message():
             if not target_node:
                 return jsonify({'success': False, 'message': f'Target node not found: {target}'}), 404
             
-            # 发送消息到目标节点
+            # Send message to target node
             target_response = requests.post(
                 f"http://{target_node['address']}/messages",
                 json={
@@ -1440,7 +1435,7 @@ def send_message():
             )
             
             if target_response.status_code == 200:
-                print(f"[Villager-{villager_state['node_id']}] 💬 发送私聊消息到 {target}: {content}")
+                print(f"[Villager-{villager_state['node_id']}] 💬 Sent private message to {target}: {content}")
                 return jsonify({'success': True, 'message': 'Private message sent'})
             else:
                 return jsonify({'success': False, 'message': 'Failed to send private message'}), 500
@@ -1451,19 +1446,19 @@ def send_message():
 
 @app.route('/messages/mark_read', methods=['POST'])
 def mark_message_read():
-    """标记消息为已读"""
+    """Mark messages as read"""
     try:
         data = request.json
         message_id = data.get('message_id')
         
         if message_id:
-            # 标记特定消息为已读
+            # Mark a specific message as read
             for msg in villager_state['messages']:
                 if msg['id'] == message_id:
                     msg['read'] = True
                     break
         else:
-            # 标记所有消息为已读
+            # Mark all messages as read
             for msg in villager_state['messages']:
                 msg['read'] = True
         
@@ -1475,9 +1470,9 @@ def mark_message_read():
 
 @app.route('/mytrades', methods=['GET'])
 def get_my_trades():
-    """获取发送的交易请求"""
+    """Get sent trade requests"""
     try:
-        # 返回发送的交易请求列表
+        # Return list of sent trade requests
         sent_trades = villager_state.get('sent_trades', [])
         return jsonify({
             'success': True,
@@ -1489,15 +1484,15 @@ def get_my_trades():
 
 @app.route('/sent_trades/add', methods=['POST'])
 def add_sent_trade():
-    """添加发送的交易记录"""
+    """Add sent trade record"""
     try:
         data = request.json
         
-        # 初始化 sent_trades 列表
+        # Initialize sent_trades list
         if 'sent_trades' not in villager_state:
             villager_state['sent_trades'] = []
         
-        # 添加交易记录
+        # Add trade record
         villager_state['sent_trades'].append(data)
         
         return jsonify({'success': True, 'message': 'Trade record added'})
@@ -1506,12 +1501,12 @@ def add_sent_trade():
 
 
 def register_to_coordinator(coordinator_addr, port, node_id):
-    """注册到协调器"""
+    """Register to coordinator"""
     import time
-    time.sleep(2)  # 等待服务启动
+    time.sleep(2)  # Wait for service to start
     
     try:
-        # 获取村民名字（如果已创建）
+        # Get villager name (if already created)
         villager_name = None
         if villager_state.get('villager'):
             villager_name = villager_state['villager'].name
@@ -1529,26 +1524,26 @@ def register_to_coordinator(coordinator_addr, port, node_id):
         
         if response.status_code == 200:
             if villager_name:
-                print(f"[Villager-{node_id}] ({villager_name}) 成功注册到协调器: {coordinator_addr}")
+                print(f"[Villager-{node_id}] ({villager_name}) Successfully registered to coordinator: {coordinator_addr}")
             else:
-                print(f"[Villager-{node_id}] 成功注册到协调器: {coordinator_addr}")
+                print(f"[Villager-{node_id}] Successfully registered to coordinator: {coordinator_addr}")
         else:
-            print(f"[Villager-{node_id}] 注册失败: {response.status_code}")
+            print(f"[Villager-{node_id}] Registration failed: {response.status_code}")
     
     except Exception as e:
-        print(f"[Villager-{node_id}] 无法连接到协调器 {coordinator_addr}: {e}")
+        print(f"[Villager-{node_id}] Unable to connect to coordinator {coordinator_addr}: {e}")
 
 
 def run_server(port, node_id, coordinator_addr=None):
-    """运行服务器"""
+    """Run server"""
     villager_state['node_id'] = node_id
     villager_state['coordinator_address'] = coordinator_addr
     villager_state['port'] = port
     
-    print(f"[Villager-{node_id}] REST村民节点启动在端口 {port}")
-    print(f"[Villager-{node_id}] 节点ID: {node_id} (村民名字将在create时设置)")
+    print(f"[Villager-{node_id}] REST Villager Node starting on port {port}")
+    print(f"[Villager-{node_id}] NodeID: {node_id} (Villager name will be set on create)")
     
-    # 在后台线程注册到协调器
+    # Register to coordinator in a background thread
     threading.Thread(
         target=register_to_coordinator,
         args=(coordinator_addr, port, node_id),
@@ -1560,12 +1555,13 @@ def run_server(port, node_id, coordinator_addr=None):
 
 if __name__ == '__main__':
     import argparse
-    parser = argparse.ArgumentParser(description='REST村民节点服务')
-    parser.add_argument('--port', type=int, required=True, help='监听端口')
-    parser.add_argument('--id', type=str, required=True, help='节点ID')
+    parser = argparse.ArgumentParser(description='REST Villager Node service')
+    parser.add_argument('--port', type=int, required=True, help='listen port')
+    parser.add_argument('--id', type=str, required=True, help='NodeID')
     parser.add_argument('--coordinator', type=str, default=f"{os.getenv('COORDINATOR_HOST', 'localhost')}:{os.getenv('COORDINATOR_PORT', '5000')}",
-                       help='协调器地址')
+                       help='Coordinator address')
     args = parser.parse_args()
     
     run_server(args.port, args.id, args.coordinator)
+
 

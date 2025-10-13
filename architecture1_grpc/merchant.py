@@ -1,6 +1,6 @@
 """
-商人节点 - Architecture 1 (gRPC)
-提供固定价格的物品买卖服务
+MerchantNode - Architecture 1 (gRPC)
+提供固定Price的Item买卖服务
 """
 
 import grpc
@@ -19,52 +19,52 @@ from common.models import MERCHANT_PRICES
 
 
 class MerchantNodeService(town_pb2_grpc.MerchantNodeServicer):
-    """商人节点服务"""
+    """MerchantNode服务"""
     
     def __init__(self, node_id="merchant"):
         self.node_id = node_id
         self.prices = MERCHANT_PRICES
-        # 中心化交易管理
+        # 中心化Trade管理
         self.trade_counter = 0
         self.active_trades = {}  # trade_id -> trade_data
-        print(f"[Merchant] 商人 '{node_id}' 初始化完成")
-        print(f"[Merchant] 出售价格: {self.prices['buy']}")
-        print(f"[Merchant] 收购价格: {self.prices['sell']}")
+        print(f"[Merchant] Merchant '{node_id}' Initialization complete")
+        print(f"[Merchant] SellPrice: {self.prices['buy']}")
+        print(f"[Merchant] 收购Price: {self.prices['sell']}")
     
     def BuyItem(self, request, context):
-        """玩家从商人处购买物品"""
+        """玩家从Merchant处BuyItem"""
         buyer_id = request.buyer_id
         item = request.item
         quantity = request.quantity
         
-        # 检查商人是否出售该物品
+        # 检查Merchant是否Sell该Item
         if item not in self.prices['buy']:
             return town_pb2.Status(
                 success=False,
-                message=f"商人不出售 {item}"
+                message=f"Merchant不Sell {item}"
             )
         
         price = self.prices['buy'][item]
         total_cost = price * quantity
         
-        print(f"[Merchant] {buyer_id} 购买 {quantity}x {item}, 总价: {total_cost}")
+        print(f"[Merchant] {buyer_id} Buy {quantity}x {item}, 总价: {total_cost}")
         
         return town_pb2.Status(
             success=True,
-            message=f"出售 {quantity}x {item} 给 {buyer_id}, 收入 {total_cost}"
+            message=f"Sell {quantity}x {item} 给 {buyer_id}, 收入 {total_cost}"
         )
     
     def SellItem(self, request, context):
-        """玩家向商人出售物品"""
+        """玩家向MerchantSellItem"""
         seller_id = request.seller_id
         item = request.item
         quantity = request.quantity
         
-        # 检查商人是否收购该物品
+        # 检查Merchant是否收购该Item
         if item not in self.prices['sell']:
             return town_pb2.Status(
                 success=False,
-                message=f"商人不收购 {item}"
+                message=f"Merchant不收购 {item}"
             )
         
         price = self.prices['sell'][item]
@@ -78,7 +78,7 @@ class MerchantNodeService(town_pb2_grpc.MerchantNodeServicer):
         )
     
     def GetPrices(self, request, context):
-        """获取价格表"""
+        """获取Price表"""
         buy_prices = [
             town_pb2.PriceInfo(item=item, price=int(price))
             for item, price in self.prices['buy'].items()
@@ -94,20 +94,20 @@ class MerchantNodeService(town_pb2_grpc.MerchantNodeServicer):
         )
     
     def OnTimeAdvance(self, request, context):
-        """时间推进通知"""
+        """TimeAdvanceNotify"""
         new_time = request.new_time
-        print(f"[Merchant] 时间推进: Day {new_time.day} {new_time.time_of_day}")
+        print(f"[Merchant] TimeAdvance: Day {new_time.day} {new_time.time_of_day}")
         
         return town_pb2.Status(success=True, message="Time updated")
     
-    # ==================== 中心化交易系统 ====================
+    # ==================== 中心化Trade系统 ====================
     
     def CreateTrade(self, request, context):
-        """创建交易（由发起方调用）"""
+        """CreateTrade（由发起方调用）"""
         self.trade_counter += 1
         trade_id = f"trade_{self.trade_counter}"
         
-        # 创建交易记录
+        # CreateTrade记录
         trade_data = {
             'trade_id': trade_id,
             'initiator_id': request.initiator_id,
@@ -126,17 +126,17 @@ class MerchantNodeService(town_pb2_grpc.MerchantNodeServicer):
         
         self.active_trades[trade_id] = trade_data
         
-        print(f"[Merchant-Trade] 创建交易 {trade_id}: {request.initiator_id} -> {request.target_id}")
-        print(f"  类型: {request.offer_type}, 物品: {request.item}x{request.quantity}, 价格: {request.price}")
+        print(f"[Merchant-Trade] CreateTrade {trade_id}: {request.initiator_id} -> {request.target_id}")
+        print(f"  类型: {request.offer_type}, Item: {request.item}x{request.quantity}, Price: {request.price}")
         
         return town_pb2.CreateTradeResponse(
             success=True,
-            message=f"交易创建成功",
+            message=f"TradeCreateSuccess",
             trade_id=trade_id
         )
     
     def ListTrades(self, request, context):
-        """列出交易"""
+        """列出Trade"""
         node_id = request.node_id
         trade_type = request.type
         
@@ -144,41 +144,41 @@ class MerchantNodeService(town_pb2_grpc.MerchantNodeServicer):
         for trade_id, trade_data in self.active_trades.items():
             # 根据类型筛选
             if trade_type == 'pending':
-                # 待处理的交易（我是target且status为pending）
+                # 待Handle的Trade（我是target且status为pending）
                 if trade_data['target_id'] == node_id and trade_data['status'] == 'pending':
                     trades.append(self._convert_trade_to_proto(trade_data))
             elif trade_type == 'sent':
-                # 我发起的交易（我是initiator）
+                # 我发起的Trade（我是initiator）
                 if trade_data['initiator_id'] == node_id:
                     trades.append(self._convert_trade_to_proto(trade_data))
             elif trade_type == 'received':
-                # 我收到的交易（我是target）
+                # 我收到的Trade（我是target）
                 if trade_data['target_id'] == node_id:
                     trades.append(self._convert_trade_to_proto(trade_data))
             elif trade_type == 'all':
-                # 所有相关交易
+                # 所有相关Trade
                 if trade_data['initiator_id'] == node_id or trade_data['target_id'] == node_id:
                     trades.append(self._convert_trade_to_proto(trade_data))
         
         return town_pb2.ListTradesResponse(trades=trades)
     
     def AcceptTrade(self, request, context):
-        """接受交易"""
+        """AcceptTrade"""
         trade_id = request.trade_id
         node_id = request.node_id
         
         if trade_id not in self.active_trades:
-            return town_pb2.Status(success=False, message="交易不存在")
+            return town_pb2.Status(success=False, message="Trade不存在")
         
         trade = self.active_trades[trade_id]
         
         # 检查是否是目标方
         if trade['target_id'] != node_id:
-            return town_pb2.Status(success=False, message="只有交易目标方可以接受")
+            return town_pb2.Status(success=False, message="只有Trade目标方可以Accept")
         
         # 检查状态
         if trade['status'] != 'pending':
-            return town_pb2.Status(success=False, message=f"交易状态错误: {trade['status']}")
+            return town_pb2.Status(success=False, message=f"Trade状态Error: {trade['status']}")
         
         # 检查目标方资源
         try:
@@ -187,7 +187,7 @@ class MerchantNodeService(town_pb2_grpc.MerchantNodeServicer):
             info = stub.GetInfo(town_pb2.Empty())
             
             if trade['offer_type'] == 'buy':
-                # 发起方想买，目标方需要有物品
+                # 发起方想买，目标方需要有Item
                 if info.inventory.items.get(trade['item'], 0) < trade['quantity']:
                     channel.close()
                     return town_pb2.Status(success=False, message=f"你没有足够的 {trade['item']}")
@@ -195,108 +195,108 @@ class MerchantNodeService(town_pb2_grpc.MerchantNodeServicer):
                 # 发起方想卖，目标方需要有钱
                 if info.inventory.money < trade['price']:
                     channel.close()
-                    return town_pb2.Status(success=False, message=f"你没有足够的货币")
+                    return town_pb2.Status(success=False, message=f"你没有足够的Money")
             
             channel.close()
         except Exception as e:
-            return town_pb2.Status(success=False, message=f"检查资源失败: {str(e)}")
+            return town_pb2.Status(success=False, message=f"检查资源Failed: {str(e)}")
         
-        # 更新状态
+        # Update状态
         trade['status'] = 'accepted'
         
-        print(f"[Merchant-Trade] 交易 {trade_id} 被接受")
+        print(f"[Merchant-Trade] Trade {trade_id} 被Accept")
         
-        return town_pb2.Status(success=True, message="交易已接受，等待双方确认")
+        return town_pb2.Status(success=True, message="Trade已Accept，Waiting双方Confirm")
     
     def ConfirmTrade(self, request, context):
-        """确认交易"""
+        """ConfirmTrade"""
         trade_id = request.trade_id
         node_id = request.node_id
         
         if trade_id not in self.active_trades:
-            return town_pb2.Status(success=False, message="交易不存在")
+            return town_pb2.Status(success=False, message="Trade不存在")
         
         trade = self.active_trades[trade_id]
         
         # 检查状态
         if trade['status'] != 'accepted':
-            return town_pb2.Status(success=False, message=f"交易状态错误: {trade['status']}")
+            return town_pb2.Status(success=False, message=f"Trade状态Error: {trade['status']}")
         
-        # 标记确认
+        # 标记Confirm
         if trade['initiator_id'] == node_id:
             trade['initiator_confirmed'] = True
-            print(f"[Merchant-Trade] {node_id} (发起方) 确认交易 {trade_id}")
+            print(f"[Merchant-Trade] {node_id} (发起方) ConfirmTrade {trade_id}")
         elif trade['target_id'] == node_id:
             trade['target_confirmed'] = True
-            print(f"[Merchant-Trade] {node_id} (目标方) 确认交易 {trade_id}")
+            print(f"[Merchant-Trade] {node_id} (目标方) ConfirmTrade {trade_id}")
         else:
-            return town_pb2.Status(success=False, message="你不是此交易的参与方")
+            return town_pb2.Status(success=False, message="你不是此Trade的参与方")
         
-        # 如果双方都确认了，执行交易
+        # 如果双方都Confirm了，ExecuteTrade
         if trade['initiator_confirmed'] and trade['target_confirmed']:
-            print(f"[Merchant-Trade] 双方已确认，执行交易 {trade_id}")
+            print(f"[Merchant-Trade] 双方已Confirm，ExecuteTrade {trade_id}")
             result = self._execute_trade(trade)
             if result['success']:
-                # 删除交易记录
+                # DeleteTrade记录
                 del self.active_trades[trade_id]
-                return town_pb2.Status(success=True, message="交易完成")
+                return town_pb2.Status(success=True, message="Trade完成")
             else:
-                # 回滚确认状态
+                # 回滚Confirm状态
                 trade['initiator_confirmed'] = False
                 trade['target_confirmed'] = False
                 trade['status'] = 'accepted'
-                return town_pb2.Status(success=False, message=f"交易执行失败: {result['message']}")
+                return town_pb2.Status(success=False, message=f"TradeExecuteFailed: {result['message']}")
         
-        return town_pb2.Status(success=True, message="确认成功，等待对方确认")
+        return town_pb2.Status(success=True, message="ConfirmSuccess，Waiting对方Confirm")
     
     def CancelTrade(self, request, context):
-        """取消交易"""
+        """CancelTrade"""
         trade_id = request.trade_id
         node_id = request.node_id
         
         if trade_id not in self.active_trades:
-            return town_pb2.Status(success=False, message="交易不存在")
+            return town_pb2.Status(success=False, message="Trade不存在")
         
         trade = self.active_trades[trade_id]
         
-        # 只有发起方可以取消
+        # 只有发起方可以Cancel
         if trade['initiator_id'] != node_id:
-            return town_pb2.Status(success=False, message="只有发起方可以取消交易")
+            return town_pb2.Status(success=False, message="只有发起方可以CancelTrade")
         
-        # 只有pending状态可以取消
+        # 只有pending状态可以Cancel
         if trade['status'] != 'pending':
-            return town_pb2.Status(success=False, message=f"无法取消 {trade['status']} 状态的交易")
+            return town_pb2.Status(success=False, message=f"无法Cancel {trade['status']} 状态的Trade")
         
         del self.active_trades[trade_id]
-        print(f"[Merchant-Trade] 交易 {trade_id} 已被取消")
+        print(f"[Merchant-Trade] Trade {trade_id} 已被Cancel")
         
-        return town_pb2.Status(success=True, message="交易已取消")
+        return town_pb2.Status(success=True, message="Trade已Cancel")
     
     def RejectTrade(self, request, context):
-        """拒绝交易"""
+        """RejectTrade"""
         trade_id = request.trade_id
         node_id = request.node_id
         
         if trade_id not in self.active_trades:
-            return town_pb2.Status(success=False, message="交易不存在")
+            return town_pb2.Status(success=False, message="Trade不存在")
         
         trade = self.active_trades[trade_id]
         
-        # 只有目标方可以拒绝
+        # 只有目标方可以Reject
         if trade['target_id'] != node_id:
-            return town_pb2.Status(success=False, message="只有目标方可以拒绝交易")
+            return town_pb2.Status(success=False, message="只有目标方可以RejectTrade")
         
-        # 只有pending状态可以拒绝
+        # 只有pending状态可以Reject
         if trade['status'] != 'pending':
-            return town_pb2.Status(success=False, message=f"无法拒绝 {trade['status']} 状态的交易")
+            return town_pb2.Status(success=False, message=f"无法Reject {trade['status']} 状态的Trade")
         
         trade['status'] = 'rejected'
-        print(f"[Merchant-Trade] 交易 {trade_id} 已被拒绝")
+        print(f"[Merchant-Trade] Trade {trade_id} 已被Reject")
         
-        return town_pb2.Status(success=True, message="交易已拒绝")
+        return town_pb2.Status(success=True, message="Trade已Reject")
     
     def _execute_trade(self, trade):
-        """执行交易的原子操作"""
+        """ExecuteTrade的原子操作"""
         trade_id = trade['trade_id']
         
         try:
@@ -318,7 +318,7 @@ class MerchantNodeService(town_pb2_grpc.MerchantNodeServicer):
             quantity = trade['quantity']
             price = trade['price']
             
-            print(f"[Merchant-Trade] 执行交易: {buyer_id} 买 {quantity}x{item} from {seller_id}, 价格 {price}")
+            print(f"[Merchant-Trade] ExecuteTrade: {buyer_id} 买 {quantity}x{item} from {seller_id}, Price {price}")
             
             # Step 1: 买方支付
             channel = grpc.insecure_channel(buyer_addr)
@@ -330,9 +330,9 @@ class MerchantNodeService(town_pb2_grpc.MerchantNodeServicer):
             channel.close()
             
             if not response.success:
-                return {'success': False, 'message': f"买方支付失败: {response.message}"}
+                return {'success': False, 'message': f"买方支付Failed: {response.message}"}
             
-            # Step 2: 卖方移除物品
+            # Step 2: 卖方移除Item
             channel = grpc.insecure_channel(seller_addr)
             stub = town_pb2_grpc.VillagerNodeStub(channel)
             response = stub.TradeExecute(town_pb2.TradeExecuteRequest(
@@ -351,10 +351,10 @@ class MerchantNodeService(town_pb2_grpc.MerchantNodeServicer):
                 ))
                 channel_buyer.close()
                 channel.close()
-                return {'success': False, 'message': f"卖方移除物品失败: {response.message}"}
+                return {'success': False, 'message': f"卖方移除ItemFailed: {response.message}"}
             channel.close()
             
-            # Step 3: 买方添加物品
+            # Step 3: 买方添加Item
             channel = grpc.insecure_channel(buyer_addr)
             stub = town_pb2_grpc.VillagerNodeStub(channel)
             response = stub.TradeExecute(town_pb2.TradeExecuteRequest(
@@ -364,7 +364,7 @@ class MerchantNodeService(town_pb2_grpc.MerchantNodeServicer):
             ))
             
             if not response.success:
-                # 回滚: 卖方添加物品，买方退款
+                # 回滚: 卖方添加Item，买方退款
                 channel_seller = grpc.insecure_channel(seller_addr)
                 stub_seller = town_pb2_grpc.VillagerNodeStub(channel_seller)
                 stub_seller.TradeExecute(town_pb2.TradeExecuteRequest(
@@ -382,7 +382,7 @@ class MerchantNodeService(town_pb2_grpc.MerchantNodeServicer):
                 ))
                 channel_buyer.close()
                 channel.close()
-                return {'success': False, 'message': f"买方添加物品失败: {response.message}"}
+                return {'success': False, 'message': f"买方添加ItemFailed: {response.message}"}
             channel.close()
             
             # Step 4: 卖方收款
@@ -395,16 +395,16 @@ class MerchantNodeService(town_pb2_grpc.MerchantNodeServicer):
             channel.close()
             
             if not response.success:
-                print(f"[Merchant-Trade] 警告: 卖方收款失败，但交易已执行")
+                print(f"[Merchant-Trade] Warning: 卖方收款Failed，但Trade已Execute")
             
-            print(f"[Merchant-Trade] 交易 {trade_id} 执行成功")
-            return {'success': True, 'message': '交易完成'}
+            print(f"[Merchant-Trade] Trade {trade_id} ExecuteSuccess")
+            return {'success': True, 'message': 'Trade完成'}
             
         except Exception as e:
-            return {'success': False, 'message': f'执行失败: {str(e)}'}
+            return {'success': False, 'message': f'ExecuteFailed: {str(e)}'}
     
     def _convert_trade_to_proto(self, trade_data):
-        """将交易数据转换为proto消息"""
+        """将Trade数据转换为protoMessage"""
         return town_pb2.TradeInfo(
             trade_id=trade_data['trade_id'],
             initiator_id=trade_data['initiator_id'],
@@ -422,7 +422,7 @@ class MerchantNodeService(town_pb2_grpc.MerchantNodeServicer):
 
 
 def serve(port=50052, coordinator_addr='localhost:50051'):
-    """启动商人服务器"""
+    """启动Merchant服务器"""
     node_id = "merchant"
     
     # 启动gRPC服务器
@@ -433,9 +433,9 @@ def serve(port=50052, coordinator_addr='localhost:50051'):
     server.add_insecure_port(f'[::]:{port}')
     server.start()
     
-    print(f"[Merchant] 商人节点启动在端口 {port}")
+    print(f"[Merchant] MerchantNodestarting on port {port}")
     
-    # 注册到协调器
+    # Register to coordinator
     try:
         channel = grpc.insecure_channel(coordinator_addr)
         stub = town_pb2_grpc.TimeCoordinatorStub(channel)
@@ -447,13 +447,13 @@ def serve(port=50052, coordinator_addr='localhost:50051'):
         ))
         
         if response.success:
-            print(f"[Merchant] 成功注册到协调器: {coordinator_addr}")
+            print(f"[Merchant] SuccessRegister to coordinator: {coordinator_addr}")
         else:
-            print(f"[Merchant] 注册失败: {response.message}")
+            print(f"[Merchant] Registration failed: {response.message}")
         
         channel.close()
     except Exception as e:
-        print(f"[Merchant] 无法连接到协调器 {coordinator_addr}: {e}")
+        print(f"[Merchant] 无法Connecting toCoordinator {coordinator_addr}: {e}")
     
     print("[Merchant] 使用 Ctrl+C 停止服务器")
     
@@ -467,10 +467,10 @@ def serve(port=50052, coordinator_addr='localhost:50051'):
 
 if __name__ == '__main__':
     import argparse
-    parser = argparse.ArgumentParser(description='商人节点服务')
+    parser = argparse.ArgumentParser(description='MerchantNode服务')
     parser.add_argument('--port', type=int, default=50052, help='监听端口')
     parser.add_argument('--coordinator', type=str, default='localhost:50051', 
-                       help='协调器地址')
+                       help='Coordinator地址')
     args = parser.parse_args()
     
     serve(args.port, args.coordinator)

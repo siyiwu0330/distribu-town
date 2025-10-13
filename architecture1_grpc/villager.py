@@ -1,6 +1,6 @@
 """
-村民节点 - Architecture 1 (gRPC)
-每个村民作为独立的微服务节点
+VillagerNode - Architecture 1 (gRPC)
+每个Villager作为独立的微服务Node
 """
 
 import grpc
@@ -23,21 +23,21 @@ from common.models import (
 
 
 class VillagerNodeService(town_pb2_grpc.VillagerNodeServicer):
-    """村民节点服务"""
+    """VillagerNode服务"""
     
     def __init__(self, node_id):
         self.node_id = node_id
         self.villager = None
         self.merchant_address = 'localhost:50052'
         
-        # 消息系统 - 简单存储
-        self.messages = []  # 存储消息
+        # Message系统 - 简单存储
+        self.messages = []  # 存储Message
         self.message_counter = 0
         
-        print(f"[Villager-{node_id}] 节点初始化")
+        print(f"[Villager-{node_id}] Node初始化")
     
     def CreateVillager(self, request, context):
-        """创建/初始化村民"""
+        """Create/初始化Villager"""
         try:
             occupation = Occupation(request.occupation)
             gender = Gender(request.gender)
@@ -49,12 +49,12 @@ class VillagerNodeService(town_pb2_grpc.VillagerNodeServicer):
                 personality=request.personality
             )
             
-            print(f"[Villager-{self.node_id}] 创建村民: {self.villager.name}")
+            print(f"[Villager-{self.node_id}] CreateVillager: {self.villager.name}")
             print(f"  职业: {self.villager.occupation.value}")
             print(f"  性别: {self.villager.gender.value}")
             print(f"  性格: {self.villager.personality}")
-            print(f"  体力: {self.villager.stamina}/{self.villager.max_stamina}")
-            print(f"  货币: {self.villager.inventory.money}")
+            print(f"  Stamina: {self.villager.stamina}/{self.villager.max_stamina}")
+            print(f"  Money: {self.villager.inventory.money}")
             
             return town_pb2.Status(
                 success=True,
@@ -67,13 +67,13 @@ class VillagerNodeService(town_pb2_grpc.VillagerNodeServicer):
             )
     
     def GetInfo(self, request, context):
-        """获取村民信息"""
+        """GetVillagerinformation"""
         if not self.villager:
             context.set_code(grpc.StatusCode.FAILED_PRECONDITION)
             context.set_details('Villager not initialized')
             return town_pb2.VillagerInfo()
         
-        # 转换库存
+        # 转换Inventory
         inventory = town_pb2.Inventory(
             money=self.villager.inventory.money,
             items=self.villager.inventory.items
@@ -92,16 +92,16 @@ class VillagerNodeService(town_pb2_grpc.VillagerNodeServicer):
         )
     
     def Produce(self, request, context):
-        """执行生产"""
+        """ExecuteProduction"""
         if not self.villager:
             return town_pb2.Status(success=False, message="Villager not initialized")
         
-        # 获取生产配方
+        # 获取Production配方
         recipe = PRODUCTION_RECIPES.get(self.villager.occupation)
         if not recipe:
             return town_pb2.Status(
                 success=False,
-                message=f"职业 {self.villager.occupation.value} 没有生产配方"
+                message=f"职业 {self.villager.occupation.value} 没有Production配方"
             )
         
         # 检查是否有足够资源
@@ -113,7 +113,7 @@ class VillagerNodeService(town_pb2_grpc.VillagerNodeServicer):
                     missing_items.append(f"{item} (需要{qty}, 拥有{have})")
             
             if self.villager.stamina < recipe.stamina_cost:
-                missing_items.append(f"体力不足 (需要{recipe.stamina_cost}, 剩余{self.villager.stamina})")
+                missing_items.append(f"Stamina不足 (需要{recipe.stamina_cost}, 剩余{self.villager.stamina})")
             
             return town_pb2.Status(
                 success=False,
@@ -126,20 +126,20 @@ class VillagerNodeService(town_pb2_grpc.VillagerNodeServicer):
         
         self.villager.consume_stamina(recipe.stamina_cost)
         
-        # 生产产出
+        # Production产出
         self.villager.inventory.add_item(recipe.output_item, recipe.output_quantity)
         
-        print(f"[Villager-{self.node_id}] {self.villager.name} 生产了 {recipe.output_quantity}x {recipe.output_item}")
-        print(f"  消耗体力: {recipe.stamina_cost}, 剩余: {self.villager.stamina}")
+        print(f"[Villager-{self.node_id}] {self.villager.name} Production了 {recipe.output_quantity}x {recipe.output_item}")
+        print(f"  消耗Stamina: {recipe.stamina_cost}, 剩余: {self.villager.stamina}")
         
         return town_pb2.Status(
             success=True,
-            message=f"生产成功: {recipe.output_quantity}x {recipe.output_item}"
+            message=f"ProductionSuccess: {recipe.output_quantity}x {recipe.output_item}"
         )
     
     def Trade(self, request, context):
-        """执行交易
-        现在统一使用中心化交易系统
+        """ExecuteTrade
+        现在统一使用中心化Trade系统
         """
         if not self.villager:
             return town_pb2.Status(success=False, message="Villager not initialized")
@@ -149,20 +149,20 @@ class VillagerNodeService(town_pb2_grpc.VillagerNodeServicer):
         quantity = request.quantity
         price = request.price
         
-        # 如果是与商人交易（保持旧逻辑兼容）
+        # 如果是与MerchantTrade（保持旧逻辑兼容）
         if target_node == 'merchant':
             # 判断是buy还是sell（price==0表示buy）
             action = 'buy' if price == 0 else 'sell'
             return self._trade_with_merchant(item, quantity, action, context)
         else:
-            # 村民间交易暂未实现（需要前端支持）
+            # Villager间Trade暂未实现（需要前端支持）
             return town_pb2.Status(
                 success=False,
-                message="村民间交易请使用交互式CLI或AI Agent"
+                message="Villager间Trade请使用交互式CLI或AI Agent"
             )
     
     def _trade_with_merchant(self, item, quantity, action, context):
-        """与商人交易
+        """与MerchantTrade
         action: 'buy' 或 'sell'
         """
         try:
@@ -170,19 +170,19 @@ class VillagerNodeService(town_pb2_grpc.VillagerNodeServicer):
             stub = town_pb2_grpc.MerchantNodeStub(channel)
             
             if action == 'buy':
-                # 从商人处购买
+                # 从Merchant处Buy
                 if item not in MERCHANT_PRICES['buy']:
-                    return town_pb2.Status(success=False, message=f"商人不出售 {item}")
+                    return town_pb2.Status(success=False, message=f"Merchant不Sell {item}")
                 
                 total_cost = MERCHANT_PRICES['buy'][item] * quantity
                 
                 if not self.villager.inventory.remove_money(total_cost):
                     return town_pb2.Status(
                         success=False,
-                        message=f"货币不足 (需要{total_cost}, 拥有{self.villager.inventory.money})"
+                        message=f"Money不足 (需要{total_cost}, 拥有{self.villager.inventory.money})"
                     )
                 
-                # 调用商人服务
+                # 调用Merchant服务
                 response = stub.BuyItem(town_pb2.BuyFromMerchantRequest(
                     buyer_id=self.node_id,
                     item=item,
@@ -191,10 +191,10 @@ class VillagerNodeService(town_pb2_grpc.VillagerNodeServicer):
                 
                 if response.success:
                     self.villager.inventory.add_item(item, quantity)
-                    print(f"[Villager-{self.node_id}] {self.villager.name} 从商人处购买 {quantity}x {item}, 花费 {total_cost}")
+                    print(f"[Villager-{self.node_id}] {self.villager.name} 从Merchant处Buy {quantity}x {item}, 花费 {total_cost}")
                     return town_pb2.Status(
                         success=True,
-                        message=f"购买成功: {quantity}x {item}, 花费 {total_cost}"
+                        message=f"BuySuccess: {quantity}x {item}, 花费 {total_cost}"
                     )
                 else:
                     # 退款
@@ -202,19 +202,19 @@ class VillagerNodeService(town_pb2_grpc.VillagerNodeServicer):
                     return response
             
             elif action == 'sell':
-                # 出售给商人
+                # Sell给Merchant
                 if item not in MERCHANT_PRICES['sell']:
-                    return town_pb2.Status(success=False, message=f"商人不收购 {item}")
+                    return town_pb2.Status(success=False, message=f"Merchant不收购 {item}")
                 
                 if not self.villager.inventory.has_item(item, quantity):
                     return town_pb2.Status(
                         success=False,
-                        message=f"物品不足: {item} (需要{quantity})"
+                        message=f"Item不足: {item} (需要{quantity})"
                     )
                 
                 total_income = MERCHANT_PRICES['sell'][item] * quantity
                 
-                # 调用商人服务
+                # 调用Merchant服务
                 response = stub.SellItem(town_pb2.SellToMerchantRequest(
                     seller_id=self.node_id,
                     item=item,
@@ -224,10 +224,10 @@ class VillagerNodeService(town_pb2_grpc.VillagerNodeServicer):
                 if response.success:
                     self.villager.inventory.remove_item(item, quantity)
                     self.villager.inventory.add_money(total_income)
-                    print(f"[Villager-{self.node_id}] {self.villager.name} 向商人出售 {quantity}x {item}, 获得 {total_income}")
+                    print(f"[Villager-{self.node_id}] {self.villager.name} 向MerchantSell {quantity}x {item}, 获得 {total_income}")
                     return town_pb2.Status(
                         success=True,
-                        message=f"出售成功: {quantity}x {item}, 获得 {total_income}"
+                        message=f"SellSuccess: {quantity}x {item}, 获得 {total_income}"
                     )
                 else:
                     return response
@@ -237,70 +237,70 @@ class VillagerNodeService(town_pb2_grpc.VillagerNodeServicer):
         except Exception as e:
             return town_pb2.Status(
                 success=False,
-                message=f"交易失败: {str(e)}"
+                message=f"TradeFailed: {str(e)}"
             )
     
     def Sleep(self, request, context):
-        """睡眠"""
+        """Sleep"""
         if not self.villager:
             return town_pb2.Status(success=False, message="Villager not initialized")
         
         if self.villager.has_slept:
             return town_pb2.Status(success=False, message="今天已经睡过了")
         
-        # 检查是否有房子或临时房间券
+        # 检查是否有房子或临时Room voucher
         has_house = self.villager.inventory.has_item("house", 1)
         has_temp_room = self.villager.inventory.has_item("temp_room", 1)
         
         if not has_house and not has_temp_room:
             return town_pb2.Status(
                 success=False,
-                message="没有房子或临时房间券，无法睡眠。请从商人处购买临时房间券或建造房子。"
+                message="没有房子或临时Room voucher，无法Sleep。请从Merchant处Buy临时Room voucher或建造房子。"
             )
         
-        # 预处理睡眠（恢复在这里执行）
+        # 预HandleSleep（恢复在这里Execute）
         sleep_message = ""
         if has_house:
-            sleep_message = "在自己的房子里睡眠"
+            sleep_message = "在自己的房子里Sleep"
         else:  # has_temp_room
-            sleep_message = "使用临时房间券睡眠（将在每日结算时消耗）"
+            sleep_message = "使用临时Room voucherSleep（将在每日结算时消耗）"
         
-        # 恢复体力
+        # 恢复Stamina
         self.villager.restore_stamina(SLEEP_STAMINA)
         self.villager.has_slept = True
         
-        print(f"[Villager-{self.node_id}] {self.villager.name} {sleep_message}，恢复体力 {SLEEP_STAMINA}")
-        print(f"  当前体力: {self.villager.stamina}/{self.villager.max_stamina}")
+        print(f"[Villager-{self.node_id}] {self.villager.name} {sleep_message}，恢复Stamina {SLEEP_STAMINA}")
+        print(f"  当前Stamina: {self.villager.stamina}/{self.villager.max_stamina}")
         
         return town_pb2.Status(
             success=True,
-            message=f"睡眠成功，恢复体力 {SLEEP_STAMINA}。{sleep_message}。"
+            message=f"SleepSuccess，恢复Stamina {SLEEP_STAMINA}。{sleep_message}。"
         )
     
     def OnTimeAdvance(self, request, context):
-        """时间推进通知"""
+        """TimeAdvanceNotify"""
         if not self.villager:
             return town_pb2.Status(success=True, message="No villager")
         
         new_time = request.new_time
-        print(f"[Villager-{self.node_id}] 时间推进: Day {new_time.day} {new_time.time_of_day}")
+        print(f"[Villager-{self.node_id}] TimeAdvance: Day {new_time.day} {new_time.time_of_day}")
         
         # 如果是新的一天（早晨）
         if new_time.time_of_day == 'morning':
-            # 如果前一天晚上没睡觉，额外扣除体力
+            # 如果前一天Evening没睡觉，额外扣除Stamina
             if not self.villager.has_slept:
                 self.villager.consume_stamina(NO_SLEEP_PENALTY)
-                print(f"[Villager-{self.node_id}] {self.villager.name} 昨晚没睡觉，额外消耗 {NO_SLEEP_PENALTY} 体力")
+                print(f"[Villager-{self.node_id}] {self.villager.name} 昨晚没睡觉，额外消耗 {NO_SLEEP_PENALTY} Stamina")
             
             # 每日重置
             self.villager.reset_daily()
             print(f"[Villager-{self.node_id}] 新的一天！")
-            print(f"  体力: {self.villager.stamina}/{self.villager.max_stamina}")
+            print(f"  Stamina: {self.villager.stamina}/{self.villager.max_stamina}")
         
         return town_pb2.Status(success=True, message="Time updated")
     
     def TradeExecute(self, request, context):
-        """交易执行（原子操作）"""
+        """TradeExecute（原子操作）"""
         if not self.villager:
             return town_pb2.Status(success=False, message="Villager not initialized")
         
@@ -308,22 +308,22 @@ class VillagerNodeService(town_pb2_grpc.VillagerNodeServicer):
         
         try:
             if action == 'pay':
-                # 支付货币
+                # 支付Money
                 money = request.money
                 if not self.villager.inventory.remove_money(money):
-                    return town_pb2.Status(success=False, message=f"货币不足")
-                print(f"[Villager-{self.node_id}] 支付 {money} 货币")
+                    return town_pb2.Status(success=False, message=f"Money不足")
+                print(f"[Villager-{self.node_id}] 支付 {money} Money")
                 return town_pb2.Status(success=True, message="Payment success")
             
             elif action == 'refund':
                 # 退款
                 money = request.money
                 self.villager.inventory.add_money(money)
-                print(f"[Villager-{self.node_id}] 退款 {money} 货币")
+                print(f"[Villager-{self.node_id}] 退款 {money} Money")
                 return town_pb2.Status(success=True, message="Refund success")
             
             elif action == 'add_item':
-                # 添加物品
+                # 添加Item
                 item = request.item
                 quantity = request.quantity
                 self.villager.inventory.add_item(item, quantity)
@@ -331,11 +331,11 @@ class VillagerNodeService(town_pb2_grpc.VillagerNodeServicer):
                 return town_pb2.Status(success=True, message="Item added")
             
             elif action == 'remove_item':
-                # 移除物品
+                # 移除Item
                 item = request.item
                 quantity = request.quantity
                 if not self.villager.inventory.has_item(item, quantity):
-                    return town_pb2.Status(success=False, message=f"物品不足: {item}")
+                    return town_pb2.Status(success=False, message=f"Item不足: {item}")
                 self.villager.inventory.remove_item(item, quantity)
                 print(f"[Villager-{self.node_id}] 移除 {quantity}x {item}")
                 return town_pb2.Status(success=True, message="Item removed")
@@ -344,7 +344,7 @@ class VillagerNodeService(town_pb2_grpc.VillagerNodeServicer):
                 # 收款
                 money = request.money
                 self.villager.inventory.add_money(money)
-                print(f"[Villager-{self.node_id}] 收到 {money} 货币")
+                print(f"[Villager-{self.node_id}] 收到 {money} Money")
                 return town_pb2.Status(success=True, message="Money received")
             
             else:
@@ -354,48 +354,48 @@ class VillagerNodeService(town_pb2_grpc.VillagerNodeServicer):
             return town_pb2.Status(success=False, message=f"Execute failed: {str(e)}")
     
     def SendMessage(self, request, context):
-        """发送消息"""
+        """SendMessage"""
         try:
             if not self.villager:
                 return town_pb2.SendMessageResponse(
                     success=False, 
-                    message="村民未初始化"
+                    message="Villager未初始化"
                 )
             
             import time
             self.message_counter += 1
             message_id = f"msg_{self.message_counter}"
             
-            # 如果是广播消息
+            # 如果是BroadcastMessage
             if request.type == 'broadcast':
-                # 发送给所有在线村民节点
+                # Send给所有在线VillagerNode
                 sent_count = 0
                 try:
                     import town_pb2_grpc
                     import grpc
                     
-                    # 连接到coordinator获取所有在线村民
+                    # Connecting tocoordinator获取所有在线Villager
                     coordinator_channel = grpc.insecure_channel('localhost:50051')
                     coordinator_stub = town_pb2_grpc.TimeCoordinatorStub(coordinator_channel)
                     
                     nodes_response = coordinator_stub.ListNodes(town_pb2.Empty())
                     coordinator_channel.close()
                     
-                    # 发送给所有村民节点
+                    # Send给所有VillagerNode
                     for node in nodes_response.nodes:
                         if node.node_type == 'villager' and node.node_id != self.node_id:
                             try:
-                                # 连接到目标村民节点
+                                # Connecting to目标VillagerNode
                                 target_channel = grpc.insecure_channel(node.address)
                                 target_stub = town_pb2_grpc.VillagerNodeStub(target_channel)
                                 
-                                # 调用目标节点的ReceiveMessage方法
+                                # 调用目标Node的ReceiveMessage方法
                                 receive_request = town_pb2.ReceiveMessageRequest(
                                     content=request.content,
                                     type='broadcast',
                                     timestamp=int(time.time())
                                 )
-                                # 设置from字段（因为from是Python关键字）
+                                # Setfrom字段（因为from是Python关键字）
                                 setattr(receive_request, 'from', self.node_id)
                                 response = target_stub.ReceiveMessage(receive_request)
                                 
@@ -404,28 +404,28 @@ class VillagerNodeService(town_pb2_grpc.VillagerNodeServicer):
                                 
                                 target_channel.close()
                             except Exception as e:
-                                print(f"[Villager-{self.node_id}] 发送广播消息到 {node.node_id} 失败: {e}")
+                                print(f"[Villager-{self.node_id}] SendBroadcastMessage到 {node.node_id} Failed: {e}")
                                 continue
                     
-                    print(f"[Villager-{self.node_id}] 广播消息发送给 {sent_count} 个节点")
+                    print(f"[Villager-{self.node_id}] BroadcastMessageSend给 {sent_count} 个Node")
                     
                 except Exception as e:
-                    print(f"[Villager-{self.node_id}] 获取在线村民失败: {e}")
+                    print(f"[Villager-{self.node_id}] 获取在线VillagerFailed: {e}")
                 
             else:
-                # P2P消息，发送给指定目标
+                # P2PMessage，Send给指定目标
                 try:
                     import town_pb2_grpc
                     import grpc
                     
-                    # 连接到coordinator获取目标村民地址
+                    # Connecting tocoordinator获取目标Villager地址
                     coordinator_channel = grpc.insecure_channel('localhost:50051')
                     coordinator_stub = town_pb2_grpc.TimeCoordinatorStub(coordinator_channel)
                     
                     nodes_response = coordinator_stub.ListNodes(town_pb2.Empty())
                     coordinator_channel.close()
                     
-                    # 查找目标村民
+                    # 查找目标Villager
                     target_address = None
                     for node in nodes_response.nodes:
                         if node.node_id == request.target:
@@ -433,73 +433,73 @@ class VillagerNodeService(town_pb2_grpc.VillagerNodeServicer):
                             break
                     
                     if target_address:
-                        # 发送给目标村民
+                        # Send给目标Villager
                         try:
                             target_channel = grpc.insecure_channel(target_address)
                             target_stub = town_pb2_grpc.VillagerNodeStub(target_channel)
                             
-                            # 调用目标节点的ReceiveMessage方法
+                            # 调用目标Node的ReceiveMessage方法
                             receive_request = town_pb2.ReceiveMessageRequest(
                                 content=request.content,
                                 type='private',
                                 timestamp=int(time.time())
                             )
-                            # 设置from字段（因为from是Python关键字）
+                            # Setfrom字段（因为from是Python关键字）
                             setattr(receive_request, 'from', self.node_id)
                             response = target_stub.ReceiveMessage(receive_request)
                             
                             if response.success:
-                                print(f"[Villager-{self.node_id}] P2P消息发送给 {request.target}")
+                                print(f"[Villager-{self.node_id}] P2PMessageSend给 {request.target}")
                             else:
                                 return town_pb2.SendMessageResponse(
                                     success=False,
-                                    message=f"发送失败: {response.message}"
+                                    message=f"SendFailed: {response.message}"
                                 )
                             
                             target_channel.close()
                         except Exception as e:
                             return town_pb2.SendMessageResponse(
                                 success=False,
-                                message=f"发送失败: {str(e)}"
+                                message=f"SendFailed: {str(e)}"
                             )
                     else:
                         return town_pb2.SendMessageResponse(
                             success=False,
-                            message=f"找不到目标村民: {request.target}"
+                            message=f"找不到目标Villager: {request.target}"
                         )
                         
                 except Exception as e:
                     return town_pb2.SendMessageResponse(
                         success=False,
-                        message=f"发送失败: {str(e)}"
+                        message=f"SendFailed: {str(e)}"
                     )
             
             return town_pb2.SendMessageResponse(
                 success=True,
-                message="消息发送成功",
+                message="MessageSendSuccess",
                 message_id=message_id
             )
             
         except Exception as e:
             return town_pb2.SendMessageResponse(
                 success=False,
-                message=f"发送消息失败: {str(e)}"
+                message=f"SendMessageFailed: {str(e)}"
             )
     
     def ReceiveMessage(self, request, context):
-        """接收消息（由其他村民节点调用）"""
+        """ReceiveMessage（由其他VillagerNode调用）"""
         try:
             if not self.villager:
                 return town_pb2.ReceiveMessageResponse(
                     success=False, 
-                    message="村民未初始化"
+                    message="Villager未初始化"
                 )
             
             import time
             self.message_counter += 1
             message_id = f"rcv_{self.message_counter}"
             
-            # 创建接收到的消息
+            # CreateReceive到的Message
             from_field = getattr(request, 'from', 'unknown')
             message = {
                 'message_id': message_id,
@@ -511,29 +511,29 @@ class VillagerNodeService(town_pb2_grpc.VillagerNodeServicer):
                 'is_read': False
             }
             
-            # 存储到消息列表
+            # 存储到Message列表
             self.messages.append(message)
             
-            print(f"[Villager-{self.node_id}] 收到消息: {request.type} from {from_field}: {request.content}")
+            print(f"[Villager-{self.node_id}] 收到Message: {request.type} from {from_field}: {request.content}")
             
             return town_pb2.ReceiveMessageResponse(
                 success=True,
-                message="消息接收成功"
+                message="MessageReceiveSuccess"
             )
             
         except Exception as e:
             return town_pb2.ReceiveMessageResponse(
                 success=False,
-                message=f"接收消息失败: {str(e)}"
+                message=f"ReceiveMessageFailed: {str(e)}"
             )
     
     def GetMessages(self, request, context):
-        """获取消息列表"""
+        """获取Message列表"""
         try:
             if not self.villager:
                 return town_pb2.GetMessagesResponse(messages=[])
             
-            # 返回所有消息
+            # 返回所有Message
             proto_messages = []
             for msg in self.messages:
                 proto_msg = town_pb2.Message(
@@ -544,7 +544,7 @@ class VillagerNodeService(town_pb2_grpc.VillagerNodeServicer):
                     timestamp=msg['timestamp'],
                     is_read=msg['is_read']
                 )
-                # 设置from字段（因为from是Python关键字）
+                # Setfrom字段（因为from是Python关键字）
                 setattr(proto_msg, 'from', msg['from'])
                 proto_messages.append(proto_msg)
             
@@ -556,7 +556,7 @@ class VillagerNodeService(town_pb2_grpc.VillagerNodeServicer):
 
 
 def serve(port, node_id, coordinator_addr='localhost:50051'):
-    """启动村民服务器"""
+    """启动Villager服务器"""
     # 启动gRPC服务器
     server = grpc.server(futures.ThreadPoolExecutor(max_workers=10))
     villager_service = VillagerNodeService(node_id)
@@ -564,9 +564,9 @@ def serve(port, node_id, coordinator_addr='localhost:50051'):
     server.add_insecure_port(f'[::]:{port}')
     server.start()
     
-    print(f"[Villager-{node_id}] 村民节点启动在端口 {port}")
+    print(f"[Villager-{node_id}] VillagerNodestarting on port {port}")
     
-    # 注册到协调器
+    # Register to coordinator
     try:
         channel = grpc.insecure_channel(coordinator_addr)
         stub = town_pb2_grpc.TimeCoordinatorStub(channel)
@@ -578,16 +578,16 @@ def serve(port, node_id, coordinator_addr='localhost:50051'):
         ))
         
         if response.success:
-            print(f"[Villager-{node_id}] 成功注册到协调器: {coordinator_addr}")
+            print(f"[Villager-{node_id}] SuccessRegister to coordinator: {coordinator_addr}")
         else:
-            print(f"[Villager-{node_id}] 注册失败: {response.message}")
+            print(f"[Villager-{node_id}] Registration failed: {response.message}")
         
         channel.close()
     except Exception as e:
-        print(f"[Villager-{node_id}] 无法连接到协调器 {coordinator_addr}: {e}")
+        print(f"[Villager-{node_id}] 无法Connecting toCoordinator {coordinator_addr}: {e}")
     
-    # 使用纯gRPC消息系统
-    print(f"[Villager-{node_id}] 使用纯gRPC消息系统，无需HTTP服务器")
+    # 使用纯gRPCMessage系统
+    print(f"[Villager-{node_id}] 使用纯gRPCMessage系统，无需HTTP服务器")
     
     print(f"[Villager-{node_id}] 使用 Ctrl+C 停止服务器")
     
@@ -601,11 +601,11 @@ def serve(port, node_id, coordinator_addr='localhost:50051'):
 
 if __name__ == '__main__':
     import argparse
-    parser = argparse.ArgumentParser(description='村民节点服务')
+    parser = argparse.ArgumentParser(description='VillagerNode服务')
     parser.add_argument('--port', type=int, required=True, help='监听端口')
-    parser.add_argument('--id', type=str, required=True, help='节点ID')
+    parser.add_argument('--id', type=str, required=True, help='NodeID')
     parser.add_argument('--coordinator', type=str, default='localhost:50051',
-                       help='协调器地址')
+                       help='Coordinator地址')
     args = parser.parse_args()
     
     serve(args.port, args.id, args.coordinator)

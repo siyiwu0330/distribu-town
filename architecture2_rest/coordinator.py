@@ -1,6 +1,6 @@
 """
-时间协调器 - Architecture 2 (REST)
-负责管理全局时间和同步所有节点
+Time Coordinator - Architecture 2 (REST)
+Manages global time and synchronizes all nodes
 """
 
 from flask import Flask, request, jsonify
@@ -13,28 +13,28 @@ from common.models import GameState, TimeOfDay
 
 app = Flask(__name__)
 
-# 全局状态
+# Global state
 game_state = GameState()
 registered_nodes = {}  # {node_id: {node_type, address}}
-pending_actions = {}   # {node_id: action_type}  - 等待提交的行动
-time_barrier_ready = False  # 是否所有节点都准备好推进时间
+pending_actions = {}   # {node_id: action_type}  - Pending action submissions
+time_barrier_ready = False  # Whether all nodes are ready to advance time
 
 
 @app.route('/health', methods=['GET'])
 def health():
-    """健康检查"""
+    """Health check"""
     return jsonify({'status': 'healthy', 'service': 'coordinator'})
 
 
 @app.route('/register', methods=['POST'])
 def register_node():
-    """注册节点"""
+    """Register node"""
     data = request.json
     node_id = data['node_id']
     node_type = data['node_type']
     address = data['address']
-    name = data.get('name', node_id)  # 可选的村民名字
-    occupation = data.get('occupation')  # 可选的职业
+    name = data.get('name', node_id)  # Optional villager name
+    occupation = data.get('occupation')  # Optional occupation
     
     registered_nodes[node_id] = {
         'node_id': node_id,
@@ -45,11 +45,11 @@ def register_node():
     }
     
     if name != node_id and occupation:
-        print(f"[Coordinator] 节点注册: {node_id} ({name} - {occupation}, {node_type}) @ {address}")
+        print(f"[Coordinator] Node registered: {node_id} ({name} - {occupation}, {node_type}) @ {address}")
     elif name != node_id:
-        print(f"[Coordinator] 节点注册: {node_id} ({name}, {node_type}) @ {address}")
+        print(f"[Coordinator] Node registered: {node_id} ({name}, {node_type}) @ {address}")
     else:
-        print(f"[Coordinator] 节点注册: {node_id} ({node_type}) @ {address}")
+        print(f"[Coordinator] Node registered: {node_id} ({node_type}) @ {address}")
     
     return jsonify({
         'success': True,
@@ -59,73 +59,73 @@ def register_node():
 
 @app.route('/time', methods=['GET'])
 def get_current_time():
-    """获取当前时间"""
+    """Get current time"""
     return jsonify(game_state.to_dict())
 
 
 @app.route('/action/submit', methods=['POST'])
 def submit_action():
-    """村民提交当前时段的行动"""
+    """Villager submits action for current time period"""
     global pending_actions, time_barrier_ready
     
     data = request.json
     node_id = data['node_id']
     action_type = data['action']  # 'work', 'sleep', 'idle'
     
-    # 记录行动
+    # Record action
     pending_actions[node_id] = action_type
     
-    print(f"\n[Coordinator] {node_id} 提交行动: {action_type}")
-    print(f"[Coordinator] 已提交: {len(pending_actions)}/{len([n for n in registered_nodes.values() if n['node_type'] == 'villager'])}")
+    print(f"\n[Coordinator] {node_id} submitted action: {action_type}")
+    print(f"[Coordinator] Submitted: {len(pending_actions)}/{len([n for n in registered_nodes.values() if n['node_type'] == 'villager'])}")
     
-    # 检查是否所有村民节点都已提交
+    # Check if all villager nodes have submitted
     villager_nodes = [nid for nid, info in registered_nodes.items() if info['node_type'] == 'villager']
     all_submitted = all(nid in pending_actions for nid in villager_nodes)
     
     if all_submitted and len(villager_nodes) > 0:
-        print(f"[Coordinator] ✓ 所有村民已提交行动，准备推进时间")
+        print(f"[Coordinator] ✓ All villagers have submitted actions, ready to advance time")
         time_barrier_ready = True
         
-        # 自动推进时间
+        # Automatically advance time
         result = _advance_time_internal()
         
         return jsonify({
             'success': True,
-            'message': '行动已提交，时间即将推进',
+            'message': 'Action submitted, time will advance',
             'all_ready': True,
             'time_advanced': True,
             'new_time': game_state.to_dict()
         })
     else:
         waiting_for = [nid for nid in villager_nodes if nid not in pending_actions]
-        print(f"[Coordinator] 等待其他村民: {waiting_for}")
+        print(f"[Coordinator] Waiting for other villagers: {waiting_for}")
         
         return jsonify({
             'success': True,
-            'message': f'行动已提交，等待其他村民 ({len(pending_actions)}/{len(villager_nodes)})',
+            'message': f'Action submitted, waiting for others ({len(pending_actions)}/{len(villager_nodes)})',
             'all_ready': False,
             'waiting_for': waiting_for
         })
 
 
 def _advance_time_internal():
-    """内部函数：实际推进时间"""
+    """Internal function: Actually advance time"""
     global game_state, pending_actions, time_barrier_ready
     
     old_time = f"Day {game_state.day} {game_state.time_of_day.value}"
     
-    # 推进时间
+    # Advance time
     game_state.advance_time()
     
     new_time = f"Day {game_state.day} {game_state.time_of_day.value}"
-    print(f"\n[Coordinator] ⏰ 时间推进: {old_time} -> {new_time}")
-    print(f"[Coordinator] 行动记录: {pending_actions}")
+    print(f"\n[Coordinator] ⏰ Time advanced: {old_time} -> {new_time}")
+    print(f"[Coordinator] Action log: {pending_actions}")
     
-    # 清空行动记录
+    # Clear action records
     pending_actions = {}
     time_barrier_ready = False
     
-    # 通知所有注册的节点
+    # Notify all registered nodes
     notification = game_state.to_dict()
     
     for node_id, node_info in registered_nodes.items():
@@ -141,12 +141,12 @@ def _advance_time_internal():
             )
             
             if response.status_code == 200:
-                print(f"[Coordinator] 通知节点: {node_id}")
+                print(f"[Coordinator] Notified node: {node_id}")
             else:
-                print(f"[Coordinator] 通知节点 {node_id} 失败: {response.status_code}")
+                print(f"[Coordinator] Failed to notify node {node_id}: {response.status_code}")
         
         except Exception as e:
-            print(f"[Coordinator] 通知节点 {node_id} 失败: {e}")
+            print(f"[Coordinator] Failed to notify node {node_id}: {e}")
     
     return {
         'success': True,
@@ -157,21 +157,21 @@ def _advance_time_internal():
 
 @app.route('/time/advance', methods=['POST'])
 def advance_time():
-    """手动推进时间（管理员功能，调试用）"""
+    """Manually advance time (admin feature, for debugging)"""
     result = _advance_time_internal()
     return jsonify(result)
 
 
 @app.route('/action/status', methods=['GET'])
 def action_status():
-    """查询当前行动提交状态"""
+    """Query current action submission status"""
     villager_nodes = {nid: info for nid, info in registered_nodes.items() if info['node_type'] == 'villager'}
     
     submitted = []
     waiting = []
     
     for nid, info in villager_nodes.items():
-        # 构建显示名称：Name (occupation)
+        # Build display name: Name (occupation)
         display_name = nid
         if info.get('name') and info['name'] != nid:
             if info.get('occupation'):
@@ -196,7 +196,7 @@ def action_status():
 
 @app.route('/nodes', methods=['GET'])
 def list_nodes():
-    """列出所有注册的节点"""
+    """List all registered nodes"""
     return jsonify({
         'nodes': list(registered_nodes.values())
     })
@@ -204,20 +204,20 @@ def list_nodes():
 
 @app.route('/messages/broadcast', methods=['POST'])
 def broadcast_message():
-    """广播消息到所有村民节点"""
+    """Broadcast message to all villager nodes"""
     try:
         data = request.json
         sender_id = data['from']
         sender_name = data['from_name']
         content = data['content']
         
-        # 获取所有村民节点
+        # Get all villager nodes
         villager_nodes = [node for node in registered_nodes.values() if node['node_type'] == 'villager']
         
         if not villager_nodes:
             return jsonify({'success': False, 'message': 'No villager nodes found'}), 404
         
-        # 向每个村民节点发送广播消息
+        # Send broadcast message to each villager node
         success_count = 0
         failed_nodes = []
         
@@ -243,13 +243,13 @@ def broadcast_message():
                     
             except Exception as e:
                 failed_nodes.append(node['node_id'])
-                print(f"[Coordinator] 无法发送广播消息到 {node['node_id']}: {e}")
+                print(f"[Coordinator] Failed to send broadcast message to {node['node_id']}: {e}")
         
-        print(f"[Coordinator] 📢 广播消息: {sender_name}: {content}")
-        print(f"[Coordinator] 成功发送到 {success_count}/{len(villager_nodes)} 个节点")
+        print(f"[Coordinator] 📢 Broadcast message: {sender_name}: {content}")
+        print(f"[Coordinator] Successfully sent to {success_count}/{len(villager_nodes)} nodes")
         
         if failed_nodes:
-            print(f"[Coordinator] 发送失败的节点: {failed_nodes}")
+            print(f"[Coordinator] Failed nodes: {failed_nodes}")
         
         return jsonify({
             'success': True,
@@ -264,16 +264,16 @@ def broadcast_message():
 
 
 def run_server(port=5000):
-    """运行服务器"""
-    print(f"[Coordinator] REST时间协调器启动在端口 {port}")
-    print("[Coordinator] 等待节点注册...")
+    """Run server"""
+    print(f"[Coordinator] REST Time Coordinator starting on port {port}")
+    print("[Coordinator] Waiting for node registration...")
     app.run(host='0.0.0.0', port=port, debug=False)
 
 
 if __name__ == '__main__':
     import argparse
-    parser = argparse.ArgumentParser(description='REST时间协调器服务')
-    parser.add_argument('--port', type=int, default=5000, help='监听端口')
+    parser = argparse.ArgumentParser(description='REST Time Coordinator Service')
+    parser.add_argument('--port', type=int, default=5000, help='Listen port')
     args = parser.parse_args()
     
     run_server(args.port)

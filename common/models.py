@@ -1,6 +1,6 @@
 """
-公共数据模型
-定义系统中所有实体的数据结构
+Common Data Models
+Defines data structures for all entities in the system
 """
 
 from dataclasses import dataclass, field
@@ -10,50 +10,50 @@ import json
 
 
 class Occupation(Enum):
-    """职业枚举"""
-    CARPENTER = "carpenter"  # 木工
-    FARMER = "farmer"        # 农夫
-    CHEF = "chef"            # 厨师
-    MERCHANT = "merchant"    # 商人（系统NPC）
+    """Occupation enumeration"""
+    CARPENTER = "carpenter"  # Carpenter
+    FARMER = "farmer"        # Farmer
+    CHEF = "chef"            # Chef
+    MERCHANT = "merchant"    # Merchant (system NPC)
 
 
 class Gender(Enum):
-    """性别枚举"""
+    """Gender enumeration"""
     MALE = "male"
     FEMALE = "female"
 
 
 class TimeOfDay(Enum):
-    """时段枚举"""
+    """Time period enumeration"""
     MORNING = "morning"
     NOON = "noon"
     EVENING = "evening"
 
 
 class ItemType(Enum):
-    """物品类型"""
-    WOOD = "wood"          # 木材
-    SEED = "seed"          # 种子
-    WHEAT = "wheat"        # 小麦
-    BREAD = "bread"        # 面包
-    HOUSE = "house"        # 住房
-    TEMP_ROOM = "temp_room"  # 临时房间券
+    """Item types"""
+    WOOD = "wood"          # Wood
+    SEED = "seed"          # Seed
+    WHEAT = "wheat"        # Wheat
+    BREAD = "bread"        # Bread
+    HOUSE = "house"        # House
+    TEMP_ROOM = "temp_room"  # Temporary room voucher
 
 
 @dataclass
 class Inventory:
-    """库存系统"""
-    money: int = 200  # 初始货币（增加到200，确保能购买原材料）
+    """Inventory system"""
+    money: int = 200  # Initial currency (increased to 200 to ensure can buy raw materials)
     items: Dict[str, int] = field(default_factory=dict)
     
     def add_item(self, item: str, quantity: int = 1):
-        """添加物品"""
+        """Add item"""
         if item not in self.items:
             self.items[item] = 0
         self.items[item] += quantity
     
     def remove_item(self, item: str, quantity: int = 1) -> bool:
-        """移除物品，返回是否成功"""
+        """Remove item, returns success status"""
         if item not in self.items or self.items[item] < quantity:
             return False
         self.items[item] -= quantity
@@ -62,22 +62,22 @@ class Inventory:
         return True
     
     def has_item(self, item: str, quantity: int = 1) -> bool:
-        """检查是否拥有足够的物品"""
+        """Check if has enough items"""
         return item in self.items and self.items[item] >= quantity
     
     def add_money(self, amount: int):
-        """增加货币"""
+        """Add money"""
         self.money += amount
     
     def remove_money(self, amount: int) -> bool:
-        """减少货币，返回是否成功"""
+        """Remove money, returns success status"""
         if self.money < amount:
             return False
         self.money -= amount
         return True
     
     def to_dict(self) -> dict:
-        """转换为字典"""
+        """Convert to dictionary"""
         return {
             "money": self.money,
             "items": self.items
@@ -85,7 +85,7 @@ class Inventory:
     
     @classmethod
     def from_dict(cls, data: dict) -> 'Inventory':
-        """从字典创建"""
+        """Create from dictionary"""
         return cls(
             money=data.get("money", 100),
             items=data.get("items", {})
@@ -94,52 +94,52 @@ class Inventory:
 
 @dataclass
 class Villager:
-    """村民数据模型"""
+    """Villager data model"""
     name: str
     occupation: Occupation
     gender: Gender
     personality: str
-    stamina: int = 100  # 体力
+    stamina: int = 100  # Stamina
     max_stamina: int = 100
     inventory: Inventory = field(default_factory=Inventory)
-    has_submitted_action: bool = False  # 当前时段是否已提交行动
-    has_slept: bool = False  # 当天是否已睡眠
+    has_submitted_action: bool = False  # Has submitted action for current time period
+    has_slept: bool = False  # Has slept today
     
     def consume_stamina(self, amount: int) -> bool:
-        """消耗体力"""
+        """Consume stamina"""
         if self.stamina < amount:
             return False
         self.stamina -= amount
         return True
     
     def restore_stamina(self, amount: int):
-        """恢复体力"""
+        """Restore stamina"""
         self.stamina = min(self.stamina + amount, self.max_stamina)
     
     def reset_time_period(self):
-        """重置时段状态（每次时间推进时调用）"""
+        """Reset time period state (called each time advancement)"""
         self.has_submitted_action = False
     
     def reset_daily(self):
-        """每日重置"""
+        """Daily reset"""
         self.has_submitted_action = False
         self.has_slept = False
-        # 饥饿扣除体力
+        # Hunger deduction
         self.stamina = max(0, self.stamina - 10)
-        # 每日结算消耗临时房间券
+        # Daily settlement consumes temporary room voucher
         if self.inventory.has_item("temp_room", 1):
             self.inventory.remove_item("temp_room", 1)
     
     def eat_bread(self) -> bool:
-        """吃面包恢复体力"""
+        """Eat bread to restore stamina"""
         if not self.inventory.has_item("bread", 1):
             return False
         self.inventory.remove_item("bread", 1)
-        self.restore_stamina(30)  # 恢复30点体力
+        self.restore_stamina(30)  # Restore 30 stamina
         return True
     
     def to_dict(self) -> dict:
-        """转换为字典"""
+        """Convert to dictionary"""
         return {
             "name": self.name,
             "occupation": self.occupation.value if isinstance(self.occupation, Occupation) else self.occupation,
@@ -154,7 +154,7 @@ class Villager:
     
     @classmethod
     def from_dict(cls, data: dict) -> 'Villager':
-        """从字典创建"""
+        """Create from dictionary"""
         occupation = Occupation(data["occupation"]) if isinstance(data["occupation"], str) else data["occupation"]
         gender = Gender(data["gender"]) if isinstance(data["gender"], str) else data["gender"]
         
@@ -174,15 +174,15 @@ class Villager:
 
 @dataclass
 class ProductionRecipe:
-    """生产配方"""
+    """Production recipe"""
     occupation: Occupation
-    input_items: Dict[str, int]  # 输入物品 {item_type: quantity}
+    input_items: Dict[str, int]  # Input items {item_type: quantity}
     output_item: str
     output_quantity: int
     stamina_cost: int
     
     def can_produce(self, inventory: Inventory, stamina: int) -> bool:
-        """检查是否可以生产"""
+        """Check if can produce"""
         if stamina < self.stamina_cost:
             return False
         for item, quantity in self.input_items.items():
@@ -191,7 +191,7 @@ class ProductionRecipe:
         return True
 
 
-# 生产配方定义
+# Production recipe definitions
 PRODUCTION_RECIPES = {
     Occupation.CARPENTER: ProductionRecipe(
         occupation=Occupation.CARPENTER,
@@ -217,51 +217,51 @@ PRODUCTION_RECIPES = {
 }
 
 
-# 商人价格表
+# Merchant price table
 MERCHANT_PRICES = {
-    # 商人出售的价格（村民购买）- 基于体力=收益的量化标准
+    # Merchant selling prices (villagers buying) - Based on stamina=income quantitative standard
     "buy": {
-        # 原材料 - 基于生产成本定价
-        "seed": 5,         # 种子 (基础成本)
-        "wheat": 10,       # 小麦 (收购价5 + 100%溢价)
-        "wood": 10,        # 木材 (收购价5 + 100%溢价)
+        # Raw materials - Priced based on production cost
+        "seed": 5,         # Seed (base cost)
+        "wheat": 10,       # Wheat (purchase price 5 + 100% markup)
+        "wood": 10,        # Wood (purchase price 5 + 100% markup)
         
-        # 产物 - 基于生产成本定价
-        "bread": 45,       # 面包 (总成本22.5 + 100%溢价)
-        "house": 260,      # 住房 (收购价130 + 100%溢价)
+        # Products - Priced based on production cost
+        "bread": 45,       # Bread (total cost 22.5 + 100% markup)
+        "house": 260,      # House (purchase price 130 + 100% markup)
         
-        # 特殊物品
-        "temp_room": 15,  # 临时房间券 (合理定价)
+        # Special items
+        "temp_room": 15,  # Temporary room voucher (reasonable pricing)
     },
-    # 商人收购的价格（村民出售）- 基于体力=收益的量化标准
+    # Merchant buying prices (villagers selling) - Based on stamina=income quantitative standard
     "sell": {
-        # 原材料 - 基于体力价值定价
-        "seed": 5,        # 种子 (基础成本)
-        "wheat": 5,       # 小麦 (农夫: 20体力/5个 = 4体力/个，定价5)
-        "wood": 5,       # 木材 (假设: 20体力/2个 = 10体力/个)
+        # Raw materials - Priced based on stamina value
+        "seed": 5,        # Seed (base cost)
+        "wheat": 5,       # Wheat (farmer: 20 stamina/5 items = 4 stamina/item, priced 5)
+        "wood": 5,       # Wood (assumed: 20 stamina/2 items = 10 stamina/item)
         
-        # 产物 - 基于体力价值定价
-        "bread": 22.5,     # 面包 (厨师: 15体力 + 3×10小麦 = 45，2个面包，每个22.5)
-        "house": 130,     # 住房 (木工: 30体力 + 10×15木材 = 180，定价180)
+        # Products - Priced based on stamina value
+        "bread": 22.5,     # Bread (chef: 15 stamina + 3×10 wheat = 45, 2 breads, each 22.5)
+        "house": 130,     # House (carpenter: 30 stamina + 10×15 wood = 180, priced 180)
     }
 }
 
 
-# 其他常量
-SLEEP_STAMINA = 30      # 睡眠恢复体力
-NO_SLEEP_PENALTY = 20   # 不睡眠额外消耗体力
-DAILY_HUNGER = 10       # 每日饥饿扣除体力
-BREAD_RESTORE = 60      # 吃面包恢复体力
+# Other constants
+SLEEP_STAMINA = 30      # Stamina restored by sleep
+NO_SLEEP_PENALTY = 20   # Extra stamina cost for not sleeping
+DAILY_HUNGER = 10       # Daily hunger stamina deduction
+BREAD_RESTORE = 60      # Stamina restored by eating bread
 
 
 @dataclass
 class GameState:
-    """游戏状态"""
+    """Game state"""
     day: int = 1
     time_of_day: TimeOfDay = TimeOfDay.MORNING
     
     def advance_time(self):
-        """推进时间"""
+        """Advance time"""
         if self.time_of_day == TimeOfDay.MORNING:
             self.time_of_day = TimeOfDay.NOON
         elif self.time_of_day == TimeOfDay.NOON:
@@ -271,7 +271,7 @@ class GameState:
             self.day += 1
     
     def to_dict(self) -> dict:
-        """转换为字典"""
+        """Convert to dictionary"""
         return {
             "day": self.day,
             "time_of_day": self.time_of_day.value if isinstance(self.time_of_day, TimeOfDay) else self.time_of_day
@@ -279,7 +279,7 @@ class GameState:
     
     @classmethod
     def from_dict(cls, data: dict) -> 'GameState':
-        """从字典创建"""
+        """Create from dictionary"""
         time_of_day = TimeOfDay(data["time_of_day"]) if isinstance(data["time_of_day"], str) else data["time_of_day"]
         return cls(
             day=data["day"],
@@ -288,10 +288,9 @@ class GameState:
 
 
 def json_serialize(obj):
-    """JSON序列化辅助函数"""
+    """JSON serialization helper function"""
     if isinstance(obj, Enum):
         return obj.value
     if hasattr(obj, 'to_dict'):
         return obj.to_dict()
     raise TypeError(f"Object of type {type(obj)} is not JSON serializable")
-

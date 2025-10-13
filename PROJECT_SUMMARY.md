@@ -1,251 +1,250 @@
-# 项目总结
+# Project Summary
 
-## 项目名称
-**分布式虚拟小镇 (Distributed Virtual Town)**
+## Project Name
+**Distributed Virtual Town**
 
-## 项目概述
-这是一个完整的分布式系统项目，实现了一个多智能体虚拟小镇模拟系统。每个村民作为独立的分布式节点运行，可以进行生产、交易、睡眠等活动，系统通过中央时间协调器实现全局时间同步。
+## Project Overview
+This is a complete distributed system project that implements a multi-agent virtual town simulation system. Each villager runs as an independent distributed node and can engage in production, trading, sleeping, and other activities. The system achieves global time synchronization through a central time coordinator.
 
-## 满足的课程要求
+## Course Requirements Met
 
-### ✓ 1. 五个功能需求
-1. **村民管理** - 创建和管理虚拟村民，支持多种属性配置
-2. **生产系统** - 三种职业的生产活动（木工→住房，农夫→小麦，厨师→面包）
-3. **交易系统** - 村民与商人之间的物品买卖
-4. **时间同步** - 全局时间管理，支持早中晚三时段同步
-5. **资源管理** - 体力、货币、物品的完整管理系统
+### ✓ 1. Five Functional Requirements
+1. **Villager Management** - Create and manage virtual villagers with multiple attribute configurations
+2. **Production System** - Production activities for three occupations (carpenter→house, farmer→wheat, chef→bread)
+3. **Trading System** - Item trading between villagers and merchants
+4. **Time Synchronization** - Global time management supporting three time periods (morning, noon, evening)
+5. **Resource Management** - Complete management system for stamina, currency, and items
 
-### ✓ 2. 两种系统架构
+### ✓ 2. Two System Architectures
 
-#### 架构1：微服务架构 + gRPC
-- **设计特点**:
-  - 每个村民作为独立的gRPC微服务
-  - 使用Protocol Buffers定义强类型接口
-  - 二进制高效通信
-- **文件位置**: `architecture1_grpc/`
-- **通信端口**: 50051-50056
+#### Architecture 1: Microservices + gRPC
+- **Design Features**:
+  - Each villager as an independent gRPC microservice
+  - Strong-typed interfaces defined using Protocol Buffers
+  - Efficient binary communication
+- **File Location**: `architecture1_grpc/`
+- **Communication Ports**: 50051-50056
 
-#### 架构2：RESTful资源导向 + HTTP
-- **设计特点**:
-  - 每个村民暴露REST API端点
-  - 使用JSON进行数据交换
-  - 标准HTTP方法（GET, POST）
-- **文件位置**: `architecture2_rest/`
-- **通信端口**: 5000-5005
+#### Architecture 2: RESTful Resource-Oriented + HTTP
+- **Design Features**:
+  - Each villager exposes REST API endpoints
+  - Data exchange using JSON
+  - Standard HTTP methods (GET, POST)
+- **File Location**: `architecture2_rest/`
+- **Communication Ports**: 5000-5005
 
-### ✓ 3. 两种通信模型
-- **gRPC**: 架构1使用，高性能二进制协议
-- **HTTP/REST**: 架构2使用，标准Web协议
+### ✓ 3. Two Communication Models
+- **gRPC**: Used in Architecture 1, high-performance binary protocol
+- **HTTP/REST**: Used in Architecture 2, standard web protocol
 
-### ✓ 4. 支持五个以上节点
-每个架构默认配置：
-- 1个时间协调器节点
-- 1个商人节点（系统NPC）
-- 4个村民节点
-- **总计6个节点**，可轻松扩展到更多
+### ✓ 4. Support for 5+ Nodes
+Default configuration for each architecture:
+- 1 time coordinator node
+- 1 merchant node (system NPC)
+- 4 villager nodes
+- **Total of 6 nodes**, easily scalable to more
 
-### ✓ 5. Docker容器化
-- 每个节点都可以独立容器化运行
-- 提供了Dockerfile和docker-compose配置
-- 支持一键部署整个分布式系统
+### ✓ 5. Docker Containerization
+- Each node can run independently in containers
+- Provides Dockerfile and docker-compose configurations
+- Supports one-click deployment of the entire distributed system
 
-### ✓ 6. 性能评估
-- 实现了完整的性能测试框架 (`performance_tests/benchmark.py`)
-- 测试指标包括:
-  - **延迟**: 平均延迟、中位数、P95、P99
-  - **吞吐量**: requests/second
-- 支持两种架构的对比测试
+### ✓ 6. Performance Evaluation
+- Implemented complete performance testing framework (`performance_tests/benchmark.py`)
+- Test metrics include:
+  - **Latency**: Average latency, median, P95, P99
+  - **Throughput**: requests/second
+- Supports comparative testing of both architectures
 
-### ✓ 7. 使用AI工具
-本项目使用Claude/Cursor AI助手完成：
-- 系统架构设计和权衡分析
-- gRPC proto文件定义
-- 两种架构的完整实现
-- 测试场景和性能基准测试代码
-- 文档编写和代码优化
+### ✓ 7. AI Tool Usage
+This project was completed using Claude/Cursor AI assistant for:
+- System architecture design and trade-off analysis
+- gRPC proto file definitions
+- Complete implementation of both architectures
+- Test scenarios and performance benchmark code
+- Documentation writing and code optimization
 
-### ✓ 8. Git版本控制
-- 已初始化Git仓库
-- 包含.gitignore配置
-- 所有源代码纳入版本管理
+### ✓ 8. Git Version Control
+- Git repository initialized
+- Includes .gitignore configuration
+- All source code under version control
 
-## 项目结构
+## Project Structure
 
 ```
 distribu-town/
-├── README.md                    # 完整项目文档
-├── QUICKSTART.md               # 快速开始指南
-├── PROJECT_SUMMARY.md          # 项目总结
-├── environment.yml             # Conda环境配置
-├── demo_complete.sh            # 完整演示脚本
-├── test_setup.py               # 环境验证脚本
+├── README.md                    # Complete project documentation
+├── QUICKSTART.md               # Quick start guide
+├── PROJECT_SUMMARY.md          # Project summary
+├── environment.yml             # Conda environment configuration
+├── demo_complete.sh            # Complete demo script
+├── test_setup.py               # Environment verification script
 │
-├── common/                     # 公共代码
-│   └── models.py              # 数据模型和游戏规则
+├── common/                     # Common code
+│   └── models.py              # Data models and game rules
 │
-├── architecture1_grpc/         # 架构1：gRPC微服务
+├── architecture1_grpc/         # Architecture 1: gRPC Microservices
 │   ├── proto/
-│   │   └── town.proto         # Protocol Buffer定义
-│   ├── coordinator.py         # 时间协调器
-│   ├── merchant.py            # 商人节点
-│   ├── villager.py            # 村民节点
-│   ├── client.py              # 交互式客户端
-│   ├── test_scenario.py       # 测试场景
-│   ├── start_demo.sh          # 启动脚本
-│   └── requirements.txt       # 依赖
+│   │   └── town.proto         # Protocol Buffer definitions
+│   ├── coordinator.py         # Time coordinator
+│   ├── merchant.py            # Merchant node
+│   ├── villager.py            # Villager node
+│   ├── client.py              # Interactive client
+│   ├── test_scenario.py       # Test scenarios
+│   ├── start_demo.sh          # Startup script
+│   └── requirements.txt       # Dependencies
 │
-├── architecture2_rest/         # 架构2：RESTful HTTP
-│   ├── coordinator.py         # 时间协调器
-│   ├── merchant.py            # 商人节点
-│   ├── villager.py            # 村民节点
-│   ├── test_scenario.py       # 测试场景
-│   ├── start_demo.sh          # 启动脚本
-│   └── requirements.txt       # 依赖
+├── architecture2_rest/         # Architecture 2: RESTful HTTP
+│   ├── coordinator.py         # Time coordinator
+│   ├── merchant.py            # Merchant node
+│   ├── villager.py            # Villager node
+│   ├── test_scenario.py       # Test scenarios
+│   ├── start_demo.sh          # Startup script
+│   └── requirements.txt       # Dependencies
 │
-└── performance_tests/          # 性能测试
-    └── benchmark.py           # 性能基准测试
+└── performance_tests/          # Performance tests
+    └── benchmark.py           # Performance benchmarks
 ```
 
-## 核心技术实现
+## Core Technical Implementation
 
-### 分布式同步机制
-- **中央协调器模式**: 时间协调器负责全局时间推进
-- **事件通知**: 协调器主动通知所有节点时间变化
-- **状态一致性**: 每个节点独立管理自身状态
+### Distributed Synchronization Mechanism
+- **Central Coordinator Pattern**: Time coordinator responsible for global time progression
+- **Event Notification**: Coordinator actively notifies all nodes of time changes
+- **State Consistency**: Each node independently manages its own state
 
-### 通信模型对比
+### Communication Model Comparison
 
-| 特性 | gRPC | REST |
-|------|------|------|
-| 协议 | HTTP/2 + Protobuf | HTTP/1.1 + JSON |
-| 数据格式 | 二进制 | 文本 |
-| 类型检查 | 编译时 | 运行时 |
-| 性能 | 高 | 中等 |
-| 调试难度 | 较难 | 容易 |
-| 生态支持 | 现代框架 | 广泛支持 |
+| Feature | gRPC | REST |
+|---------|------|------|
+| Protocol | HTTP/2 + Protobuf | HTTP/1.1 + JSON |
+| Data Format | Binary | Text |
+| Type Checking | Compile-time | Runtime |
+| Performance | High | Medium |
+| Debugging Difficulty | Harder | Easier |
+| Ecosystem Support | Modern frameworks | Wide support |
 
-### 节点设计
-- **无状态设计**: 每个节点可独立重启
-- **松耦合**: 节点间通过协调器间接通信
-- **可扩展**: 支持动态添加新节点
+### Node Design
+- **Stateless Design**: Each node can restart independently
+- **Loose Coupling**: Nodes communicate indirectly through coordinator
+- **Scalable**: Supports dynamic addition of new nodes
 
-## 使用说明
+## Usage Instructions
 
-### 环境设置
+### Environment Setup
 ```bash
-# 创建并激活conda环境
+# Create and activate conda environment
 conda env create -f environment.yml
 conda activate distribu-town
 
-# 验证环境
+# Verify environment
 python test_setup.py
 ```
 
-### 快速启动
+### Quick Start
 
-**架构1 (gRPC)**:
+**Architecture 1 (gRPC)**:
 ```bash
 cd architecture1_grpc
 bash start_demo.sh
-# 在另一个终端运行测试
+# Run tests in another terminal
 python test_scenario.py
 ```
 
-**架构2 (REST)**:
+**Architecture 2 (REST)**:
 ```bash
 cd architecture2_rest
 bash start_demo.sh
-# 在另一个终端运行测试
+# Run tests in another terminal
 python test_scenario.py
 ```
 
-**完整演示**:
+**Complete Demo**:
 ```bash
 bash demo_complete.sh
 ```
 
-### 性能测试
+### Performance Testing
 ```bash
-# 确保两个架构的服务都在运行
-# 终端1: cd architecture1_grpc && bash start_demo.sh
-# 终端2: cd architecture2_rest && bash start_demo.sh
-# 终端3:
+# Ensure services for both architectures are running
+# Terminal 1: cd architecture1_grpc && bash start_demo.sh
+# Terminal 2: cd architecture2_rest && bash start_demo.sh
+# Terminal 3:
 python performance_tests/benchmark.py --requests 100
 ```
 
-## 系统特点
+## System Features
 
-### 优点
-1. **模块化设计**: 清晰的职责分离
-2. **双架构对比**: 深入理解不同通信模型的权衡
-3. **完整功能**: 从创建村民到资源管理的完整生命周期
-4. **可扩展性**: 易于添加新职业、新物品、新节点
-5. **测试完备**: 包含自动化测试和性能基准测试
+### Advantages
+1. **Modular Design**: Clear separation of responsibilities
+2. **Dual Architecture Comparison**: Deep understanding of trade-offs between different communication models
+3. **Complete Functionality**: Full lifecycle from creating villagers to resource management
+4. **Scalability**: Easy to add new occupations, new items, new nodes
+5. **Comprehensive Testing**: Includes automated tests and performance benchmarks
 
-### 技术亮点
-1. **分布式时间同步**: 统一的时间推进机制
-2. **跨节点通信**: 两种不同的通信模型实现
-3. **状态管理**: 每个节点独立管理状态
-4. **性能对比**: 量化分析不同架构的性能差异
+### Technical Highlights
+1. **Distributed Time Synchronization**: Unified time progression mechanism
+2. **Cross-Node Communication**: Two different communication model implementations
+3. **State Management**: Each node independently manages state
+4. **Performance Comparison**: Quantitative analysis of performance differences between architectures
 
-## 扩展方向
+## Extension Directions
 
-### 短期扩展
-1. 实现村民间直接交易
-2. 添加更多职业类型
-3. 引入天气系统影响生产
-4. 添加持久化存储
+### Short-term Extensions
+1. Implement direct villager-to-villager trading
+2. Add more occupation types
+3. Introduce weather system affecting production
+4. Add persistent storage
 
-### 长期扩展
-1. 引入真正的AI Agent控制村民
-2. 实现分布式共识算法
-3. 添加容错和故障恢复机制
-4. Web UI控制面板
-5. 支持Kubernetes部署
+### Long-term Extensions
+1. Introduce real AI agents to control villagers
+2. Implement distributed consensus algorithms
+3. Add fault tolerance and recovery mechanisms
+4. Web UI control panel
+5. Support Kubernetes deployment
 
-## 学习收获
+## Learning Outcomes
 
-### 分布式系统理解
-- 中央协调 vs 去中心化
-- 同步通信 vs 异步通信
-- 状态一致性挑战
+### Distributed Systems Understanding
+- Central coordination vs decentralization
+- Synchronous vs asynchronous communication
+- State consistency challenges
 
-### 架构设计权衡
-- 性能 vs 易用性
-- 复杂度 vs 功能性
-- 可维护性 vs 高性能
+### Architecture Design Trade-offs
+- Performance vs usability
+- Complexity vs functionality
+- Maintainability vs high performance
 
-### AI工具应用
-- 快速原型开发
-- 代码生成和优化
-- 架构设计建议
-- 文档自动化
+### AI Tool Application
+- Rapid prototype development
+- Code generation and optimization
+- Architecture design recommendations
+- Documentation automation
 
-## 性能测试结果预期
+## Expected Performance Test Results
 
-基于设计分析，预期结果：
-- **gRPC**: 更低的延迟（~5-10ms），更高的吞吐量（~200-300 req/s）
-- **REST**: 稍高的延迟（~10-20ms），中等吞吐量（~100-200 req/s）
+Based on design analysis, expected results:
+- **gRPC**: Lower latency (~5-10ms), higher throughput (~200-300 req/s)
+- **REST**: Slightly higher latency (~10-20ms), medium throughput (~100-200 req/s)
 
-实际结果会受到网络、硬件等因素影响，但gRPC在性能上应该有明显优势。
+Actual results will be affected by network, hardware, and other factors, but gRPC should have a clear performance advantage.
 
-## 总结
+## Summary
 
-这个项目成功实现了一个功能完整的分布式虚拟小镇系统，满足了所有课程要求：
-- ✓ 五个功能需求
-- ✓ 两种系统架构（微服务 + RESTful）
-- ✓ 两种通信模型（gRPC + HTTP）
-- ✓ 5+个节点支持
-- ✓ Docker容器化
-- ✓ 性能评估和对比
-- ✓ AI工具辅助开发
-- ✓ Git版本控制
+This project successfully implements a fully functional distributed virtual town system that meets all course requirements:
+- ✓ Five functional requirements
+- ✓ Two system architectures (Microservices + RESTful)
+- ✓ Two communication models (gRPC + HTTP)
+- ✓ 5+ node support
+- ✓ Docker containerization
+- ✓ Performance evaluation and comparison
+- ✓ AI tool-assisted development
+- ✓ Git version control
 
-项目代码清晰，文档完善，易于理解和扩展，为学习分布式系统提供了一个实践性很强的案例。
+The project code is clear, documentation is comprehensive, easy to understand and extend, providing a highly practical case study for learning distributed systems.
 
-## 作者
-使用AI工具（Claude/Cursor）协助完成
+## Author
+Completed with AI tool assistance (Claude/Cursor)
 
-## 许可证
+## License
 MIT License
-

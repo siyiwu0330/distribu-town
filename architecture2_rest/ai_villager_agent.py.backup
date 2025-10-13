@@ -1,7 +1,7 @@
 #!/usr/bin/env python3
 """
-AI Agent Villager - GPT-based intelligent villager agent
-Can automatically read states and decide what to do during the current period
+AI Agent村民 - 基于GPT的智能村民代理
+可以自动读取状态并决定在当前时段做什么
 """
 
 import requests
@@ -15,7 +15,7 @@ import openai
 from datetime import datetime
 
 class AIVillagerAgent:
-    """AIVillager Agent"""
+    """AI村民代理"""
     
     def __init__(self, villager_port: int, coordinator_port: int = 5000, merchant_port: int = 5001, 
                  api_key: str = None, model: str = "gpt-4.1", use_react: bool = False):
@@ -24,35 +24,35 @@ class AIVillagerAgent:
         self.merchant_url = f"http://localhost:{merchant_port}"
         self.villager_port = villager_port
         
-        # OpenAI configuration
+        # OpenAI配置
         self.api_key = api_key
         self.model = model
         self.use_react = use_react
         if api_key:
             openai.api_key = api_key
         
-        # Villager Info
+        # 村民信息
         self.villager_info = None
         self.villager_name = None
         self.villager_occupation = None
         
-        # Running status
+        # 运行状态
         self.running = False
         self.decision_thread = None
         
-        # Decision history
+        # 决策历史
         self.decision_history = []
         
-        # Trade tracking
-        self.sent_trades_tracker = {}  # Track sent Trade requests
+        # 交易跟踪
+        self.sent_trades_tracker = {}  # 跟踪已发送的交易请求
         
-        # Message tracking
-        self.sent_messages_tracker = []  # Track recently sent Messages
+        # 消息跟踪
+        self.sent_messages_tracker = []  # 跟踪最近发送的消息
         
-        print(f"[AI Agent] Initialization complete, connecting to Villager Node: {villager_port}")
+        print(f"[AI Agent] 初始化完成，连接到村民节点: {villager_port}")
     
     def check_connection(self) -> bool:
-        """Check connection"""
+        """检查连接"""
         try:
             response = requests.get(f"{self.villager_url}/health", timeout=2)
             return response.status_code == 200
@@ -60,18 +60,18 @@ class AIVillagerAgent:
             return False
     
     def get_villager_status(self) -> Optional[Dict]:
-        """Get Villager Status"""
+        """获取村民状态"""
         try:
             response = requests.get(f"{self.villager_url}/villager", timeout=5)
             if response.status_code == 200:
                 return response.json()
             return None
         except Exception as e:
-            print(f"[AI Agent] Failed to get Villager status: {e}")
+            print(f"[AI Agent] 获取村民状态失败: {e}")
             return None
     
     def get_current_time(self) -> str:
-        """Get current Time"""
+        """获取当前时间"""
         try:
             response = requests.get(f"{self.coordinator_url}/time", timeout=5)
             if response.status_code == 200:
@@ -79,40 +79,42 @@ class AIVillagerAgent:
                 return f"Day {time_data['day']} - {time_data['time_of_day']}"
             return "Unknown"
         except Exception as e:
-            print(f"[AI Agent] Failed to get Time: {e}")
+            print(f"[AI Agent] 获取时间失败: {e}")
             return "Unknown"
     
     def get_action_status(self) -> Optional[Dict]:
-        """Get Action Submit Status"""
+        """获取行动提交状态"""
         try:
             response = requests.get(f"{self.coordinator_url}/action/status", timeout=5)
             if response.status_code == 200:
                 return response.json()
             return None
         except Exception as e:
-            print(f"[AI Agent] Failed to get Action status: {e}")
+            print(f"[AI Agent] 获取行动状态失败: {e}")
             return None
     
     def get_merchant_prices(self) -> Optional[Dict]:
-        """Get Merchant Prices"""
+        """获取商人价格"""
         try:
             response = requests.get(f"{self.merchant_url}/prices", timeout=5)
             if response.status_code == 200:
                 return response.json()
             return None
         except Exception as e:
-            print(f"[AI Agent] Failed to get Merchant Prices: {e}")
+            print(f"[AI Agent] 获取商人价格失败: {e}")
             return None
     
     def get_trades_received(self) -> List[Dict]:
-        """Get received Trade requests (from Merchant centralized system)"""
+        """获取收到的交易请求（从Merchant中心化系统）"""
         try:
+            # 获取自己的node_id
             villager_state = self.get_villager_status() or {}
             my_node_id = villager_state.get('node_id')
             
             if not my_node_id:
                 return []
             
+            # 从Merchant查询收到的交易（type='pending'表示收到的待处理交易）
             response = requests.get(f"{self.merchant_url}/trade/list",
                                   params={'node_id': my_node_id, 'type': 'pending'},
                                   timeout=5)
@@ -120,18 +122,20 @@ class AIVillagerAgent:
                 return response.json().get('trades', [])
             return []
         except Exception as e:
-            print(f"[AI Agent] Failed to get Trade requests: {e}")
+            print(f"[AI Agent] 获取交易请求失败: {e}")
             return []
     
     def get_trades_sent(self) -> List[Dict]:
-        """Get sent Trade requests (from Merchant centralized system)"""
+        """获取发送的交易请求（从Merchant中心化系统）"""
         try:
+            # 获取自己的node_id
             villager_state = self.get_villager_status() or {}
             my_node_id = villager_state.get('node_id')
             
             if not my_node_id:
                 return []
             
+            # 从Merchant查询发送的交易（type='sent'表示自己发起的交易）
             response = requests.get(f"{self.merchant_url}/trade/list",
                                   params={'node_id': my_node_id, 'type': 'sent'},
                                   timeout=5)
@@ -139,22 +143,22 @@ class AIVillagerAgent:
                 return response.json().get('trades', [])
             return []
         except Exception as e:
-            print(f"[AI Agent] Failed to get sent Trades: {e}")
+            print(f"[AI Agent] 获取发送交易失败: {e}")
             return []
 
     def get_messages(self) -> List[Dict]:
-        """Get Message list"""
+        """获取消息列表"""
         try:
             response = requests.get(f"{self.villager_url}/messages", timeout=5)
             if response.status_code == 200:
                 return response.json().get('messages', [])
             return []
         except Exception as e:
-            print(f"[AI Agent] Failed to get Messages: {e}")
+            print(f"[AI Agent] 获取消息失败: {e}")
             return []
     
     def get_online_villagers(self) -> List[Dict]:
-        """Get list of online Villagers (including submission status)"""
+        """获取在线村民列表（包含提交状态）"""
         try:
             response = requests.get(f"{self.coordinator_url}/nodes", timeout=5)
             if response.status_code == 200:
@@ -162,7 +166,7 @@ class AIVillagerAgent:
                 villagers = []
                 for node in nodes_data['nodes']:
                     if node['node_type'] == 'villager':
-                        # Get detailed Villager status
+                        # 获取村民的详细状态
                         try:
                             villager_response = requests.get(f"http://{node['address']}/villager", timeout=3)
                             if villager_response.status_code == 200:
@@ -177,7 +181,7 @@ class AIVillagerAgent:
                                     'address': node['address']
                                 })
                             else:
-                                # If unable to get details, use basic info
+                                # 如果无法获取详细状态，使用基本信息
                                 villagers.append({
                                     'node_id': node['node_id'],
                                     'name': node.get('name', node['node_id']),
@@ -188,7 +192,7 @@ class AIVillagerAgent:
                                     'address': node['address']
                                 })
                         except Exception as e:
-                            # If getting detailed info fails, use basic info
+                            # 如果获取详细状态失败，使用基本信息
                             villagers.append({
                                 'node_id': node['node_id'],
                                 'name': node.get('name', node['node_id']),
@@ -201,11 +205,11 @@ class AIVillagerAgent:
                 return villagers
             return []
         except Exception as e:
-            print(f"[AI Agent] Failed to get online Villagers: {e}")
+            print(f"[AI Agent] 获取在线村民失败: {e}")
             return []
     
     def analyze_p2p_opportunities(self, context: Dict) -> Dict:
-        """Analyze P2P Trade opportunities"""
+        """分析P2P交易机会"""
         opportunities = {
             'sell_opportunities': [],
             'buy_opportunities': [],
@@ -218,20 +222,20 @@ class AIVillagerAgent:
         villagers = context.get('villagers', [])
         prices = context.get('prices', {})
         
-        # Analyze selling opportunities
+        # 分析出售机会
         if occupation == 'farmer' and inventory.get('wheat', 0) > 0:
-            # Farmer sells Wheat to Chef
+            # 农夫出售小麦给厨师
             for other_villager in villagers:
                 if other_villager.get('occupation') == 'chef':
                     other_inventory = other_villager.get('inventory', {})
-                    if other_inventory.get('wheat', 0) < 3:  # Chef needs Wheat
+                    if other_inventory.get('wheat', 0) < 3:  # 厨师需要小麦
                         quantity = min(inventory['wheat'], 3 - other_inventory.get('wheat', 0))
                         if quantity > 0:
                             target_node_id = other_villager['node_id']
                             suggested_price = 7
                             total_price = suggested_price * quantity
                             
-                            # Check if a similar Trade request has already been sent
+                            # 检查是否已经发送过相同的交易请求
                             if not self.has_sent_trade_request(target_node_id, 'wheat', quantity, total_price):
                                 opportunities['sell_opportunities'].append({
                                     'target': target_node_id,
@@ -245,12 +249,12 @@ class AIVillagerAgent:
                                     'negotiation_message': f"Hi! I have {quantity}x wheat to sell for {total_price} gold total ({suggested_price} gold each). This is better than the merchant's buy price of 5 gold each. Would you like to buy?"
                                 })
         
-        elif occupation == 'chef' and inventory.get('bread', 0) > 2:  # Keep 2 Bread for self-use
-            # Chef sells Bread to other Villagers
+        elif occupation == 'chef' and inventory.get('bread', 0) > 2:  # 保留2个面包自用
+            # 厨师出售面包给其他村民
             for other_villager in villagers:
                 if other_villager.get('node_id') != villager.get('node_id'):
                     other_inventory = other_villager.get('inventory', {})
-                    if other_inventory.get('bread', 0) < 2:  # Other villagers need Bread
+                    if other_inventory.get('bread', 0) < 2:  # 其他村民需要面包
                         quantity = min(inventory['bread'] - 2, 2 - other_inventory.get('bread', 0))
                         if quantity > 0:
                             opportunities['sell_opportunities'].append({
@@ -258,32 +262,32 @@ class AIVillagerAgent:
                                 'target_name': other_villager.get('name', 'Unknown'),
                                 'item': 'bread',
                                 'quantity': quantity,
-                                'suggested_price': 35,  # Between 22.5 (merchant buy) and 45 (merchant sell)
+                                'suggested_price': 35,  # 介于22.5(merchant buy)和45(merchant sell)之间
                                 'total_price': 35 * quantity,
                                 'merchant_buy_price': prices.get('sell', {}).get('bread', 22.5),
                                 'merchant_sell_price': prices.get('buy', {}).get('bread', 45)
                             })
         
         elif occupation == 'carpenter' and inventory.get('house', 0) > 0:
-            # Carpenter sells house to villagers without one
+            # 木工出售房子给没有房子的村民
             for other_villager in villagers:
                 if other_villager.get('node_id') != villager.get('node_id'):
                     other_inventory = other_villager.get('inventory', {})
-                    if other_inventory.get('house', 0) == 0:  # Has no house
+                    if other_inventory.get('house', 0) == 0:  # 没有房子
                         opportunities['sell_opportunities'].append({
                             'target': other_villager['node_id'],
                             'target_name': other_villager.get('name', 'Unknown'),
                             'item': 'house',
                             'quantity': 1,
-                            'suggested_price': 180,  # Between 130 (merchant buy) and 260 (merchant sell)
+                            'suggested_price': 180,  # 介于130(merchant buy)和260(merchant sell)之间
                             'total_price': 180,
                             'merchant_buy_price': prices.get('sell', {}).get('house', 130),
                             'merchant_sell_price': prices.get('buy', {}).get('house', 260)
                         })
         
-        # Analyze buying opportunities
+        # 分析购买机会
         if occupation == 'chef' and inventory.get('wheat', 0) < 3:
-            # Chef buys Wheat from Farmer
+            # 厨师从农夫购买小麦
             for other_villager in villagers:
                 if other_villager.get('occupation') == 'farmer':
                     other_inventory = other_villager.get('inventory', {})
@@ -294,7 +298,7 @@ class AIVillagerAgent:
                             suggested_price = 7
                             total_price = suggested_price * quantity
                             
-                            # Check if a similar Trade request has already been sent
+                            # 检查是否已经发送过相同的交易请求
                             if not self.has_sent_trade_request(target_node_id, 'wheat', quantity, total_price):
                                 opportunities['buy_opportunities'].append({
                                     'target': target_node_id,
@@ -309,7 +313,7 @@ class AIVillagerAgent:
                                 })
         
         elif occupation == 'carpenter' and inventory.get('wood', 0) < 10:
-            # Carpenter buys Wood from other Villagers (if available)
+            # 木工从其他村民购买木材（如果有的话）
             for other_villager in villagers:
                 if other_villager.get('node_id') != villager.get('node_id'):
                     other_inventory = other_villager.get('inventory', {})
@@ -321,7 +325,7 @@ class AIVillagerAgent:
                                 'target_name': other_villager.get('name', 'Unknown'),
                                 'item': 'wood',
                                 'quantity': quantity,
-                                'suggested_price': 7,  # Between 5 (merchant buy) and 10 (merchant sell)
+                                'suggested_price': 7,  # 介于5(merchant buy)和10(merchant sell)之间
                                 'total_price': 7 * quantity,
                                 'merchant_buy_price': prices.get('sell', {}).get('wood', 5),
                                 'merchant_sell_price': prices.get('buy', {}).get('wood', 10)
@@ -330,13 +334,13 @@ class AIVillagerAgent:
         return opportunities
     
     def _format_p2p_opportunities(self, opportunities: Dict) -> str:
-        """Format P2P Trade opportunities display"""
+        """格式化P2P交易机会显示"""
         if not opportunities:
             return "No P2P opportunities available"
         
         result = []
         
-        # Sell opportunities
+        # 出售机会
         sell_ops = opportunities.get('sell_opportunities', [])
         if sell_ops:
             result.append("🎯 SELL OPPORTUNITIES:")
@@ -350,7 +354,7 @@ class AIVillagerAgent:
                 result.append(f"    ⚠️ IMPORTANT: Use node ID '{op['target']}' not name '{op['target_name']}'")
                 result.append("")
         
-        # Buy opportunities
+        # 购买机会
         buy_ops = opportunities.get('buy_opportunities', [])
         if buy_ops:
             result.append("💰 BUY OPPORTUNITIES:")
@@ -370,9 +374,9 @@ class AIVillagerAgent:
         return "\n".join(result)
     
     def check_villager_status(self, node_id: str) -> Dict:
-        """Check the status of the specified Villager"""
+        """检查指定村民的状态"""
         try:
-            # Get node information from Coordinator
+            # 从协调器获取节点信息
             response = requests.get(f"{self.coordinator_url}/nodes", timeout=5)
             if response.status_code != 200:
                 return {"error": "Cannot get nodes list"}
@@ -380,7 +384,7 @@ class AIVillagerAgent:
             nodes_data = response.json()
             target_node = None
             
-            # Find target node
+            # 查找目标节点
             for node in nodes_data['nodes']:
                 if node['node_id'] == node_id:
                     target_node = node
@@ -389,22 +393,22 @@ class AIVillagerAgent:
             if not target_node:
                 return {"error": f"Node {node_id} not found"}
             
-            # Get detailed status of the target Villager
+            # 获取目标村民的详细状态
             villager_response = requests.get(f"http://{target_node['address']}/villager", timeout=5)
             if villager_response.status_code != 200:
                 return {"error": f"Cannot get villager status for {node_id}"}
             
             villager_data = villager_response.json()
             
-            # Check whether trading is possible
+            # 检查是否可以交易
             can_trade = True
             reason = ""
             
-            # Trading doesn't consume Stamina; SubmittedAction doesn't affect trading
+            # 交易不消耗体力，已提交行动不影响交易
             if villager_data.get('has_submitted_action', False):
-                # SubmittedAction present but trading is still allowed; just a status reminder
+                # 已提交行动但仍可交易，只是提醒状态
                 can_trade = True
-                reason = "Target villager has submitted action, but can still trade"
+                reason = "目标村民已提交行动，但可以交易"
             
             return {
                 "node_id": node_id,
@@ -421,15 +425,15 @@ class AIVillagerAgent:
             return {"error": f"Error checking villager status: {e}"}
     
     def send_negotiation_message(self, target: str, item: str, quantity: int, price: int, trade_type: str) -> bool:
-        """Send negotiation Message"""
+        """发送谈判消息"""
         try:
-            # Build negotiation Message
+            # 构建谈判消息
             if trade_type == 'buy':
                 message = f"Hi! I'd like to buy {quantity}x {item} from you for {price} gold total ({price//quantity} gold each). This is better than the merchant's price of {price//quantity + 3} gold each. Are you interested?"
             else:  # sell
                 message = f"Hi! I have {quantity}x {item} to sell for {price} gold total ({price//quantity} gold each). This is better than the merchant's buy price of {price//quantity - 2} gold each. Would you like to buy?"
             
-            # Send Message
+            # 发送消息
             response = requests.post(f"{self.villager_url}/messages/send",
                                    json={
                                        'target': target,
@@ -438,22 +442,22 @@ class AIVillagerAgent:
                                    }, timeout=10)
             
             if response.status_code == 200:
-                print(f"[AI Agent] Negotiation message sent to {target}: {message}")
+                print(f"[AI Agent] 谈判消息已发送给 {target}: {message}")
                 return True
             else:
-                print(f"[AI Agent] ✗ Failed to send negotiation message: HTTP {response.status_code}")
+                print(f"[AI Agent] ✗ 发送谈判消息失败: HTTP {response.status_code}")
                 return False
                 
         except Exception as e:
-            print(f"[AI Agent] ✗ Exception when sending negotiation message: {e}")
+            print(f"[AI Agent] ✗ 发送谈判消息异常: {e}")
             return False
     
     def has_sent_trade_request(self, target: str, item: str, quantity: int, price: int) -> bool:
-        """Check whether an identical Trade request has already been sent (only check trades in pending status)"""
-        # Query sent trades from Merchant
+        """检查是否已经发送过相同的交易请求（仅检查pending状态的交易）"""
+        # 从Merchant查询实际的sent trades
         trades_sent = self.get_trades_sent()
         
-        # Only check trades in 'pending' or 'accepted' status (completed/rejected are excluded)
+        # 只检查pending或accepted状态的交易（completed/rejected的不算）
         for trade in trades_sent:
             if (trade.get('target_id') == target and 
                 trade.get('item') == item and 
@@ -464,7 +468,7 @@ class AIVillagerAgent:
         return False
     
     def mark_trade_request_sent(self, target: str, item: str, quantity: int, price: int):
-        """Mark Trade request as sent"""
+        """标记交易请求已发送"""
         trade_key = f"{target}_{item}_{quantity}_{price}"
         self.sent_trades_tracker[trade_key] = {
             "target": target,
@@ -475,18 +479,18 @@ class AIVillagerAgent:
         }
     
     def clear_old_trade_requests(self):
-        """Clean up old Trade request records (older than 5 minutes)"""
+        """清理旧的交易请求记录（超过5分钟的）"""
         current_time = time.time()
         old_keys = []
         for key, trade_info in self.sent_trades_tracker.items():
-            if current_time - trade_info["timestamp"] > 300:  # 5 minutes
+            if current_time - trade_info["timestamp"] > 300:  # 5分钟
                 old_keys.append(key)
         
         for key in old_keys:
             del self.sent_trades_tracker[key]
     
     def _handle_pending_trades(self, trades_received: List[Dict], context: Dict):
-        """Handle pending Trade requests"""
+        """处理待处理的交易请求"""
         villager = context.get('villager', {})
         inventory = villager.get('inventory', {}).get('items', {})
         money = villager.get('inventory', {}).get('money', 0)
@@ -500,77 +504,77 @@ class AIVillagerAgent:
             offer_type = trade.get('offer_type', '')
             from_villager = trade.get('from', '')
             
-            print(f"[AI Agent] {self.villager_name} Handle Trade request: {offer_type} {quantity}x {item} for {price} gold from {from_villager}")
+            print(f"[AI Agent] {self.villager_name} 处理交易请求: {offer_type} {quantity}x {item} for {price} gold from {from_villager}")
             
-            # Simple trade decision logic
+            # 简单的交易决策逻辑
             should_accept = False
             reason = ""
             
             if offer_type == 'buy':
-                # The other party wants to buy my item
+                # 对方想买我的物品
                 available_quantity = inventory.get(item, 0)
                 if available_quantity >= quantity:
-                    # Check whether the price is reasonable
+                    # 检查价格是否合理
                     merchant_prices = context.get('prices', {}).get('prices', {})
                     merchant_buy_price = merchant_prices.get(item, 0) * quantity
                     
-                    if price >= merchant_buy_price * 0.8:  # At least 80% of merchant price
+                    if price >= merchant_buy_price * 0.8:  # 至少是商人价格的80%
                         should_accept = True
-                        reason = f"Price reasonable ({price} >= {merchant_buy_price * 0.8})"
+                        reason = f"价格合理 ({price} >= {merchant_buy_price * 0.8})"
                     else:
-                        reason = f"Price too low ({price} < {merchant_buy_price * 0.8})"
+                        reason = f"价格太低 ({price} < {merchant_buy_price * 0.8})"
                 else:
-                    reason = f"Insufficient item: {item} (needed {quantity}, have {available_quantity})"
+                    reason = f"物品不足: {item} (需要{quantity}, 拥有{available_quantity})"
             
             elif offer_type == 'sell':
-                # The other party wants to sell item to me
+                # 对方想卖物品给我
                 if money >= price:
-                    # Check whether the price is reasonable
+                    # 检查价格是否合理
                     merchant_prices = context.get('prices', {}).get('prices', {})
                     merchant_sell_price = merchant_prices.get(item, 0) * quantity
                     
-                    if price <= merchant_sell_price * 1.2:  # At most 120% of merchant price
+                    if price <= merchant_sell_price * 1.2:  # 最多是商人价格的120%
                         should_accept = True
-                        reason = f"Price reasonable ({price} <= {merchant_sell_price * 1.2})"
+                        reason = f"价格合理 ({price} <= {merchant_sell_price * 1.2})"
                     else:
-                        reason = f"Price too high ({price} > {merchant_sell_price * 1.2})"
+                        reason = f"价格太高 ({price} > {merchant_sell_price * 1.2})"
                 else:
-                    reason = f"Insufficient money ({money} < {price})"
+                    reason = f"货币不足 ({money} < {price})"
             
-            # Execute trade decision
+            # 执行交易决策
             if should_accept:
-                print(f"[AI Agent] {self.villager_name} Accept Trade: {reason}")
+                print(f"[AI Agent] {self.villager_name} 接受交易: {reason}")
                 try:
                     success = self.execute_action("accept_trade", trade_id=trade_id)
                     if success:
-                        print(f"[AI Agent] ✓ Trade accept success")
-                        # Send message to notify initiator that trade was accepted
-                        message = f"Trade {trade_id} accepted! Please use 'confirm {trade_id}' to confirm the trade."
+                        print(f"[AI Agent] ✓ 交易接受成功")
+                        # 发送消息通知发起方交易已接受
+                        message = f"交易 {trade_id} 已接受！请使用 'confirm {trade_id}' 来确认交易。"
                         self.execute_action("send_message", target=from_villager, content=message)
-                        print(f"[AI Agent] {self.villager_name} has notified {from_villager} that the trade was accepted")
+                        print(f"[AI Agent] {self.villager_name} 已通知 {from_villager} 交易已接受")
                     else:
-                        print(f"[AI Agent] ✗ Trade accept failed")
+                        print(f"[AI Agent] ✗ 交易接受失败")
                 except Exception as e:
-                    print(f"[AI Agent] ✗ Trade accept exception: {e}")
+                    print(f"[AI Agent] ✗ 交易接受异常: {e}")
             else:
-                print(f"[AI Agent] {self.villager_name} Reject Trade: {reason}")
+                print(f"[AI Agent] {self.villager_name} 拒绝交易: {reason}")
                 try:
                     success = self.execute_action("reject_trade", trade_id=trade_id)
                     if success:
-                        print(f"[AI Agent] ✓ Trade reject success")
+                        print(f"[AI Agent] ✓ 交易拒绝成功")
                     else:
-                        print(f"[AI Agent] ✗ Trade reject failed")
+                        print(f"[AI Agent] ✗ 交易拒绝失败")
                 except Exception as e:
-                    print(f"[AI Agent] ✗ Trade reject exception: {e}")
+                    print(f"[AI Agent] ✗ 交易拒绝异常: {e}")
     
     def _handle_sent_trades_confirmation(self, trades_sent: List[Dict], context: Dict):
-        """Handle sent trades (two-phase submission)"""
+        """处理已发送交易（两阶段提交）"""
         for trade in trades_sent:
             trade_id = trade.get('trade_id', '')
             status = trade.get('status', 'pending')
             
             if status == 'accepted':
-                print(f"[AI Agent] {self.villager_name} found accepted trade {trade_id}, attempting to confirm...")
+                print(f"[AI Agent] {self.villager_name} 发现已接受的交易 {trade_id}，尝试确认...")
                 try:
                     result = self.execute_action("confirm_trade", trade_id=trade_id)
                     if isinstance(result, tuple):
@@ -580,16 +584,16 @@ class AIVillagerAgent:
                         error_message = None
                     
                     if success:
-                        print(f"[AI Agent] ✓ {self.villager_name} successfully submitted trade {trade_id}")
+                        print(f"[AI Agent] ✓ {self.villager_name} 成功提交交易 {trade_id}")
                     else:
-                        print(f"[AI Agent] ✗ {self.villager_name} submit trade failed: {error_message}")
+                        print(f"[AI Agent] ✗ {self.villager_name} 提交交易失败: {error_message}")
                 except Exception as e:
-                    print(f"[AI Agent] ✗ {self.villager_name} submit trade exception: {e}")
+                    print(f"[AI Agent] ✗ {self.villager_name} 提交交易异常: {e}")
             elif status == 'pending':
-                print(f"[AI Agent] {self.villager_name} Waiting trade {trade_id} standing by...")
+                print(f"[AI Agent] {self.villager_name} 等待交易 {trade_id} 准备就绪...")
     
     def create_villager(self, name: str, occupation: str, gender: str, personality: str) -> bool:
-        """CreateVillager"""
+        """创建村民"""
         try:
             response = requests.post(
                 f"{self.villager_url}/villager",
@@ -608,20 +612,20 @@ class AIVillagerAgent:
                     self.villager_info = result['villager']
                     self.villager_name = name
                     self.villager_occupation = occupation
-                    print(f"[AI Agent] ✓ VillagerCreateSuccess: {name} ({occupation})")
+                    print(f"[AI Agent] ✓ 村民创建成功: {name} ({occupation})")
                     return True
                 else:
-                    print(f"[AI Agent] ✗ VillagerCreateFailed: {result.get('message')}")
+                    print(f"[AI Agent] ✗ 村民创建失败: {result.get('message')}")
                     return False
             else:
-                print(f"[AI Agent] ✗ VillagerCreateFailed: HTTP {response.status_code}")
+                print(f"[AI Agent] ✗ 村民创建失败: HTTP {response.status_code}")
                 return False
         except Exception as e:
-            print(f"[AI Agent] ✗ VillagerCreate exception: {e}")
+            print(f"[AI Agent] ✗ 村民创建异常: {e}")
             return False
     
     def _can_produce_now(self, villager: Dict) -> bool:
-        """Check whether production can start now"""
+        """检查是否可以立即生产"""
         occ = villager.get('occupation', '').lower()
         items = villager.get('inventory', {}).get('items', {}) or {}
         stamina = villager.get('stamina', 0)
@@ -634,7 +638,7 @@ class AIVillagerAgent:
         return False
 
     def execute_action(self, action: str, **kwargs) -> bool:
-        """ExecuteAction"""
+        """执行行动"""
         try:
             if action == "produce":
                 response = requests.post(f"{self.villager_url}/action/produce", timeout=10)
@@ -659,18 +663,18 @@ class AIVillagerAgent:
                 response = requests.get(f"{self.merchant_url}/prices", timeout=10)
                 if response.status_code == 200:
                     prices_data = response.json()
-                    print(f"[AI Agent] MerchantPrice: {prices_data}")
+                    print(f"[AI Agent] 商人价格: {prices_data}")
                     return True
                 else:
-                    print(f"[AI Agent] ✗ Failed to get price: HTTP {response.status_code}")
+                    print(f"[AI Agent] ✗ 获取价格失败: HTTP {response.status_code}")
                     return False
             elif action == "trades":
-                # Trades received from Merchant query
+                # 从Merchant查询收到的交易
                 villager_state = self.get_villager_status() or {}
                 my_node_id = villager_state.get('node_id')
                 
                 if not my_node_id:
-                    print(f"[AI Agent] ✗ Unable to get node_id")
+                    print(f"[AI Agent] ✗ 无法获取node_id")
                     return False
                 
                 merchant_url = self.merchant_url
@@ -679,18 +683,18 @@ class AIVillagerAgent:
                                       timeout=10)
                 if response.status_code == 200:
                     trades_data = response.json()
-                    print(f"[AI Agent] Received trade requests: {trades_data}")
+                    print(f"[AI Agent] 收到的交易请求: {trades_data}")
                     return True
                 else:
-                    print(f"[AI Agent] ✗ Failed to get trade requests: HTTP {response.status_code}")
+                    print(f"[AI Agent] ✗ 获取交易请求失败: HTTP {response.status_code}")
                     return False
             elif action == "mytrades":
-                # Trades sent from Merchant query
+                # 从Merchant查询发送的交易
                 villager_state = self.get_villager_status() or {}
                 my_node_id = villager_state.get('node_id')
                 
                 if not my_node_id:
-                    print(f"[AI Agent] ✗ Unable to get node_id")
+                    print(f"[AI Agent] ✗ 无法获取node_id")
                     return False
                 
                 merchant_url = self.merchant_url
@@ -699,64 +703,64 @@ class AIVillagerAgent:
                                       timeout=10)
                 if response.status_code == 200:
                     trades_data = response.json()
-                    print(f"[AI Agent] Sent trade requests: {trades_data}")
+                    print(f"[AI Agent] 发送的交易请求: {trades_data}")
                     return True
                 else:
-                    print(f"[AI Agent] ✗ Failed to get sent trades: HTTP {response.status_code}")
+                    print(f"[AI Agent] ✗ 获取发送交易失败: HTTP {response.status_code}")
                     return False
             elif action == "trade":
-                # New centralized trade system: create trade via Merchant
+                # 新的中心化交易系统：通过Merchant创建交易
                 target = kwargs.get('target')
                 trade_action = kwargs.get('trade_action', 'buy')
                 item = kwargs.get('item')
                 quantity = kwargs.get('quantity')
                 price = kwargs.get('price')
                 
-                # Check whether an identical trade request has already been sent
+                # 检查是否已经发送过相同的交易请求
                 if self.has_sent_trade_request(target, item, quantity, price):
-                    print(f"[AI Agent] ⚠️ Identical trade request already sent: {trade_action} {quantity}x {item} to {target} for {price} gold")
+                    print(f"[AI Agent] ⚠️ 已经发送过相同的交易请求: {trade_action} {quantity}x {item} to {target} for {price} gold")
                     return False
                 
-                # Check target villager status
+                # 检查目标村民状态
                 target_status = self.check_villager_status(target)
                 if 'error' in target_status:
-                    print(f"[AI Agent] ✗ Unable to check target villager status: {target_status['error']}")
+                    print(f"[AI Agent] ✗ 无法检查目标村民状态: {target_status['error']}")
                     return False
                 
                 if not target_status.get('can_trade', True):
-                    print(f"[AI Agent] ⚠️ Target villager cannot trade: {target_status.get('reason', 'Unknown reason')}")
+                    print(f"[AI Agent] ⚠️ 目标村民无法交易: {target_status.get('reason', 'Unknown reason')}")
                     return False
                 
-                # Get target node address and own node_id from Coordinator
+                # 从协调器获取目标节点地址和自己的node_id
                 villager_state = self.get_villager_status() or {}
                 coordinator_addr = villager_state.get('coordinator_address', 'localhost:5000')
                 my_node_id = villager_state.get('node_id')
                 
                 if not my_node_id:
-                    print(f"[AI Agent] ✗ Unable to get own node_id")
+                    print(f"[AI Agent] ✗ 无法获取自己的node_id")
                     return False
                 
                 nodes_response = requests.get(f"http://{coordinator_addr}/nodes", timeout=5)
                 
                 if nodes_response.status_code != 200:
-                    print(f"[AI Agent] ✗ Failed to get node list: HTTP {nodes_response.status_code}")
+                    print(f"[AI Agent] ✗ 获取节点列表失败: HTTP {nodes_response.status_code}")
                     return False
                 
                 nodes_data = nodes_response.json()
                 target_node = None
                 
-                # Find target node (supports node ID and villager name)
+                # 查找目标节点（支持节点ID和村民名称）
                 for node in nodes_data['nodes']:
                     if node['node_id'] == target or node.get('name') == target:
                         target_node = node
                         break
                 
                 if not target_node:
-                    print(f"[AI Agent] ✗ Target node not found: {target}")
+                    print(f"[AI Agent] ✗ 找不到目标节点: {target}")
                     return False
                 
-                # Create trade via Merchant
-                merchant_url = self.merchant_url  # Merchant default port
+                # 通过Merchant创建交易
+                merchant_url = self.merchant_url  # Merchant默认端口
                 response = requests.post(f"{merchant_url}/trade/create", 
                                         json={
                                             'initiator_id': my_node_id,
@@ -772,12 +776,12 @@ class AIVillagerAgent:
                 if response.status_code == 200:
                     trade_data = response.json()
                     trade_id = trade_data.get('trade_id')
-                    print(f"[AI Agent] Trade created: {trade_id} - {trade_action} {quantity}x {item} for {price} gold to {target}")
-                    # Mark trade request as sent
+                    print(f"[AI Agent] 交易已创建: {trade_id} - {trade_action} {quantity}x {item} for {price} gold to {target}")
+                    # 标记交易请求已发送
                     self.mark_trade_request_sent(target, item, quantity, price)
                     return True
                 else:
-                    print(f"[AI Agent] ✗ Create trade failed: HTTP {response.status_code}")
+                    print(f"[AI Agent] ✗ 创建交易失败: HTTP {response.status_code}")
                     return False
             elif action == "send_message":
                 target = kwargs.get('target')
@@ -793,13 +797,13 @@ class AIVillagerAgent:
                         error_message = f'HTTP {response.status_code}'
                     return False, error_message
             elif action == "accept_trade":
-                # Accept trade via Merchant
+                # 通过Merchant接受交易
                 trade_id = kwargs.get('trade_id')
                 villager_state = self.get_villager_status() or {}
                 my_node_id = villager_state.get('node_id')
                 
                 if not my_node_id:
-                    print(f"[AI Agent] ✗ Unable to get node_id")
+                    print(f"[AI Agent] ✗ 无法获取node_id")
                     return False
                 
                 merchant_url = self.merchant_url
@@ -807,13 +811,13 @@ class AIVillagerAgent:
                                        json={'trade_id': trade_id, 'node_id': my_node_id}, 
                                        timeout=10)
             elif action == "confirm_trade":
-                # Confirm trade via Merchant
+                # 通过Merchant确认交易
                 trade_id = kwargs.get('trade_id')
                 villager_state = self.get_villager_status() or {}
                 my_node_id = villager_state.get('node_id')
                 
                 if not my_node_id:
-                    print(f"[AI Agent] ✗ Unable to get node_id")
+                    print(f"[AI Agent] ✗ 无法获取node_id")
                     return False
                 
                 merchant_url = self.merchant_url
@@ -821,13 +825,13 @@ class AIVillagerAgent:
                                        json={'trade_id': trade_id, 'node_id': my_node_id}, 
                                        timeout=10)
             elif action == "reject_trade":
-                # Reject trade via Merchant
+                # 通过Merchant拒绝交易
                 trade_id = kwargs.get('trade_id')
                 villager_state = self.get_villager_status() or {}
                 my_node_id = villager_state.get('node_id')
                 
                 if not my_node_id:
-                    print(f"[AI Agent] ✗ Unable to get node_id")
+                    print(f"[AI Agent] ✗ 无法获取node_id")
                     return False
                 
                 merchant_url = self.merchant_url
@@ -835,13 +839,13 @@ class AIVillagerAgent:
                                        json={'trade_id': trade_id, 'node_id': my_node_id}, 
                                        timeout=10)
             elif action == "cancel_trade":
-                # Cancel trade via Merchant
+                # 通过Merchant取消交易
                 trade_id = kwargs.get('trade_id')
                 villager_state = self.get_villager_status() or {}
                 my_node_id = villager_state.get('node_id')
                 
                 if not my_node_id:
-                    print(f"[AI Agent] ✗ Unable to get node_id")
+                    print(f"[AI Agent] ✗ 无法获取node_id")
                     return False
                 
                 merchant_url = self.merchant_url
@@ -849,74 +853,74 @@ class AIVillagerAgent:
                                        json={'trade_id': trade_id, 'node_id': my_node_id}, 
                                        timeout=10)
             else:
-                print(f"[AI Agent] ✗ Unknown action: {action}")
+                print(f"[AI Agent] ✗ 未知行动: {action}")
                 return False
             
             if response.status_code == 200:
                 result = response.json()
                 if result.get('success', True):
-                    print(f"[AI Agent] ✓ ExecuteActionSuccess: {action}")
+                    print(f"[AI Agent] ✓ 执行行动成功: {action}")
                     return True
                 else:
-                    print(f"[AI Agent] ✗ ExecuteActionFailed: {result.get('message')}")
+                    print(f"[AI Agent] ✗ 执行行动失败: {result.get('message')}")
                     return False
             else:
-                print(f"[AI Agent] ✗ ExecuteActionFailed: HTTP {response.status_code}")
+                print(f"[AI Agent] ✗ 执行行动失败: HTTP {response.status_code}")
                 return False
         except Exception as e:
-            print(f"[AI Agent] ✗ Execute action exception: {e}")
+            print(f"[AI Agent] ✗ 执行行动异常: {e}")
             return False
     
     def generate_decision(self, context: Dict) -> Dict:
-        """Generate decision (ReAct mode)"""
+        """生成决策（ReAct模式）"""
         if not self.api_key:
-            print("[AI Agent] ✗ API Key not configured; cannot use GPT")
+            print("[AI Agent] ✗ 未配置API Key，无法使用GPT")
             return {"action": "idle", "reason": "No API key configured"}
         
         try:
-            # Use ReAct structure
+            # 使用ReAct结构
             prompt = self._build_react_prompt(context)
             system_prompt = self._get_react_system_prompt()
             max_tokens = 800
             
-            # Debug: print the state seen by GPT
-            print(f"[AI Agent DEBUG] State seen by GPT:")
-            print(f"  Stamina: {context.get('villager', {}).get('stamina')}/{context.get('villager', {}).get('max_stamina')}")
-            print(f"  Money: {context.get('villager', {}).get('inventory', {}).get('money')}")
-            print(f"  Item: {context.get('villager', {}).get('inventory', {}).get('items')}")
-            print(f"  Message: {len(context.get('messages', []))} items")
-            print(f"  Trade requests: {len(context.get('trades_received', []))} items")
-            print(f"  Sent trades: {len(context.get('trades_sent', []))} items")
-            print(f"  SubmittedAction: {context.get('villager', {}).get('has_submitted_action', False)}")
-            print(f"  Other villagers' status: {[(v['name'], v.get('has_submitted_action', False)) for v in context.get('villagers', [])]}")
+            # 调试：打印GPT看到的状态
+            print(f"[AI Agent DEBUG] GPT看到的状态:")
+            print(f"  体力: {context.get('villager', {}).get('stamina')}/{context.get('villager', {}).get('max_stamina')}")
+            print(f"  货币: {context.get('villager', {}).get('inventory', {}).get('money')}")
+            print(f"  物品: {context.get('villager', {}).get('inventory', {}).get('items')}")
+            print(f"  消息: {len(context.get('messages', []))} 条")
+            print(f"  交易请求: {len(context.get('trades_received', []))} 条")
+            print(f"  发送交易: {len(context.get('trades_sent', []))} 条")
+            print(f"  已提交行动: {context.get('villager', {}).get('has_submitted_action', False)}")
+            print(f"  其他村民状态: {[(v['name'], v.get('has_submitted_action', False)) for v in context.get('villagers', [])]}")
             
-            # Show detailed Trade info
+            # 显示详细的交易信息
             trades_received = context.get('trades_received', [])
             if trades_received:
-                print(f"[AI Agent DEBUG] Details of received trade requests:")
+                print(f"[AI Agent DEBUG] 收到的交易请求详情:")
                 for trade in trades_received:
-                    # Get initiator's name
+                    # 获取发起方名字
                     initiator_id = trade.get('initiator_id', 'Unknown')
-                    initiator_name = initiator_id  # use node_id by default
+                    initiator_name = initiator_id  # 默认使用node_id
                     
-                    # Try to get the name from the online villager list
+                    # 尝试从在线村民列表中获取名字
                     villagers = context.get('villagers', [])
                     for villager in villagers:
                         if villager.get('node_id') == initiator_id:
                             initiator_name = villager.get('name', initiator_id)
                             break
                     
-                    print(f"  {trade.get('trade_id')}: {initiator_name} wants to {trade.get('offer_type')} {trade.get('quantity')}x {trade.get('item')} for {trade.get('price')} gold")
+                    print(f"  {trade.get('trade_id')}: {initiator_name} 想{trade.get('offer_type')} {trade.get('quantity')}x {trade.get('item')} for {trade.get('price')} gold")
             
             trades_sent = context.get('trades_sent', [])
             if trades_sent:
-                print(f"[AI Agent DEBUG] Details of sent trade requests:")
+                print(f"[AI Agent DEBUG] 发送的交易请求详情:")
                 for trade in trades_sent:
-                    # Get target's name
+                    # 获取目标方名字
                     target_id = trade.get('target_id', 'unknown')
-                    target_name = target_id  # use node_id by default
+                    target_name = target_id  # 默认使用node_id
                     
-                    # Try to get the name from the online villager list
+                    # 尝试从在线村民列表中获取名字
                     villagers = context.get('villagers', [])
                     for villager in villagers:
                         if villager.get('node_id') == target_id:
@@ -925,9 +929,9 @@ class AIVillagerAgent:
                     
                     offer_type = trade.get('offer_type', 'unknown')
                     status = trade.get('status', 'pending')
-                    print(f"  {trade.get('trade_id')}: Sent to {target_name} - {offer_type} {trade.get('quantity')}x {trade.get('item')} for {trade.get('price')} gold (status: {status})")
+                    print(f"  {trade.get('trade_id')}: 发送给 {target_name} - {offer_type} {trade.get('quantity')}x {trade.get('item')} for {trade.get('price')} gold (状态: {status})")
             
-            # Call GPT API
+            # 调用GPT API
             response = openai.ChatCompletion.create(
                 model=self.model,
                 messages=[
@@ -940,11 +944,11 @@ class AIVillagerAgent:
             
             decision_text = response.choices[0].message.content.strip()
             
-            # Parse decision based on mode
-            # Parse response in ReAct format
+            # 根据模式解析决策
+            # 解析ReAct格式的响应
             decision = self._parse_react_decision(decision_text)
             
-            # Record decision history
+            # 记录决策历史
             self.decision_history.append({
                 'timestamp': datetime.now().isoformat(),
                 'context': context,
@@ -955,11 +959,11 @@ class AIVillagerAgent:
             return decision
             
         except Exception as e:
-            print(f"[AI Agent] ✗ GPT decision generation failed: {e}")
+            print(f"[AI Agent] ✗ GPT决策生成失败: {e}")
             return {"action": "idle", "reason": f"GPT error: {str(e)}"}
     
     def _get_react_system_prompt(self) -> str:
-        """Get ReAct system prompt"""
+        """获取ReAct系统提示词"""
         return """You are a **ReAct Villager Agent** in the *Distributed Virtual Town* simulation.
 
 You must follow the ReAct (Reasoning + Acting) pattern:
@@ -1119,7 +1123,7 @@ ACTION: buy seed 2
 Remember: Only output THOUGHT and ACTION. The OBSERVATION will be provided in the next cycle."""
 
     def _get_system_prompt(self) -> str:
-        """Get system prompt"""
+        """获取系统提示词"""
         return """You are a **single villager node** agent in the *Distributed Virtual Town* simulation.
 Your task is to keep your villager alive, productive, and economically efficient in a distributed world of villagers, merchants, and a time coordinator.
 You operate autonomously, following the game's rules, using REST/CLI actions to interact with the world.
@@ -1280,7 +1284,7 @@ QUANTITY HEURISTIC:
 - Choose quantities dynamically; buy the minimum needed to enable production now, plus a small buffer if affordable"""
     
     def _build_react_prompt(self, context: Dict) -> str:
-        """Build ReAct prompt"""
+        """构建ReAct提示词"""
         villager = context.get('villager', {})
         time_info = context.get('time', '')
         action_status = context.get('action_status', {})
@@ -1290,19 +1294,19 @@ QUANTITY HEURISTIC:
         trades_sent = self.get_trades_sent()
         villagers = context.get('villagers', [])
         
-        # Get item information
+        # 获取物品信息
         inventory = villager.get('inventory', {})
         items = inventory.get('items', {})
         money = inventory.get('money', 0)
         
-        # Analyze current status
+        # 分析当前状态
         stamina = villager.get('stamina', 0)
         max_stamina = villager.get('max_stamina', 100)
         occupation = villager.get('occupation', 'Unknown')
         has_submitted = villager.get('has_submitted_action', False)
         has_slept = villager.get('has_slept', False)
         
-        # Determine current time period
+        # 判断当前时段
         is_evening = 'evening' in time_info.lower() or 'night' in time_info.lower()
         
         prompt = f"""=== CURRENT STATE ===
@@ -1361,37 +1365,37 @@ Now follow the ReAct pattern:"""
         return prompt
 
     def _get_recent_observations(self) -> str:
-        """Get recent observations (enhanced: show more context)"""
+        """获取最近的观察结果（增强版：显示更多上下文）"""
         if not self.decision_history:
             return "No previous observations."
         
-        recent = self.decision_history[-5:]  # Increase to last 5 decisions
+        recent = self.decision_history[-5:]  # 增加到最近5次决策
         observations = []
         
         for entry in recent:
-            timestamp = entry['timestamp'][:19]  # Remove milliseconds
+            timestamp = entry['timestamp'][:19]  # 去掉毫秒
             decision = entry['decision']
             action = decision.get('action', 'unknown')
             command = decision.get('command', '')
-            reason = decision.get('reason', 'No reason')[:80]  # Limit reason length
+            reason = decision.get('reason', 'No reason')[:80]  # 限制理由长度
             success = decision.get('success', True)
             error_msg = decision.get('error_message', '')
             
             if success:
-                # Show action and command
+                # 显示动作和命令
                 action_display = f"[{timestamp}] {action.upper()}"
                 if command:
                     action_display += f": {command}"
                 observations.append(action_display)
                 
-                # Show different info based on different actions
+                # 根据不同动作显示不同信息
                 if action == "send":
-                    # Show sent message
+                    # 显示发送的消息
                     target = decision.get('target', 'unknown')
                     content = decision.get('content', '')[:100]
                     observations.append(f"  → Sent to {target}: \"{content}\"")
                 elif action == "trade":
-                    # Show initiated trade
+                    # 显示发起的交易
                     target = decision.get('target', 'unknown')
                     trade_action = decision.get('trade_action', 'unknown')
                     item = decision.get('item', 'unknown')
@@ -1399,7 +1403,7 @@ Now follow the ReAct pattern:"""
                     price = decision.get('price', 0)
                     observations.append(f"  → Trade request: {trade_action} {quantity}x {item} @ {price} gold to {target}")
                 elif action == "price":
-                    # Show queried price
+                    # 显示查询的价格
                     if 'prices' in decision:
                         prices = decision.get('prices', {})
                         buy_prices = prices.get('buy', {})
@@ -1429,14 +1433,14 @@ Now follow the ReAct pattern:"""
                 if error_msg:
                     observations.append(f"  → Error: {error_msg[:100]}")
         
-        # === REFLEXION: Automatically detect problem patterns and generate reflections ===
+        # === REFLEXION: 自动检测问题模式并生成反思 ===
         reflexions = []
         
         if len(recent) >= 3:
             last_3_actions = [entry['decision'].get('action') for entry in recent[-3:]]
             last_3_commands = [entry['decision'].get('command', '') for entry in recent[-3:]]
             
-            # Pattern 1: Consecutive send messages but no trade
+            # 模式1: 连续发送消息但没有交易
             send_count = last_3_actions.count('send')
             trade_count = last_3_actions.count('trade')
             if send_count >= 2 and trade_count == 0:
@@ -1444,7 +1448,7 @@ Now follow the ReAct pattern:"""
                 reflexions.append("   → REFLEXION: You're stuck in negotiation. Stop talking and SEND THE TRADE!")
                 reflexions.append("   → SUGGESTED ACTION: trade <node_id> <buy/sell> <item> <quantity> <price>")
             
-            # Pattern 1b: Consecutive query info (price/trades/mytrades) but no action
+            # 模式1b: 连续查询信息（price/trades/mytrades）但不行动
             info_actions = ['price', 'trades', 'mytrades']
             info_count = sum(1 for a in last_3_actions if a in info_actions)
             action_count = sum(1 for a in last_3_actions if a in ['produce', 'buy', 'sell', 'trade', 'sleep', 'eat'])
@@ -1457,32 +1461,32 @@ Now follow the ReAct pattern:"""
                 elif last_action in ['trades', 'mytrades']:
                     reflexions.append("   → SUGGESTED ACTION: Accept/confirm trades, or send new trade request")
             
-            # Pattern 1c: Initiate trade but didn't check price first
-            # Check if there's a trade in the last 5 decisions but no price check before it
+            # 模式1c: 发起交易但没有先查询价格
+            # 检查最近5次决策中是否有trade但之前没有price
             if len(self.decision_history) >= 2:
                 last_5 = self.decision_history[-5:]
                 for i, entry in enumerate(last_5):
                     if entry['decision'].get('action') == 'trade':
-                        # Check if price was queried before this trade
+                        # 检查这次trade之前是否查询过价格
                         has_price_before = False
-                        for j in range(max(0, i-2), i):  # Check previous 2 decisions
+                        for j in range(max(0, i-2), i):  # 检查前2次决策
                             if last_5[j]['decision'].get('action') == 'price':
                                 has_price_before = True
                                 break
                         
-                        if not has_price_before and i == len(last_5) - 1:  # If it's the most recent and no price check
+                        if not has_price_before and i == len(last_5) - 1:  # 如果是最近一次且没查价格
                             reflexions.append("🟡 PATTERN DETECTED: Sent trade WITHOUT checking prices first!")
                             reflexions.append("   → REFLEXION: Always check 'price' before P2P trading!")
                             reflexions.append("   → REASON: Merchant prices fluctuate daily (±10%), need current data for fair offers")
                             break
             
-            # Pattern 2: Repeating same or similar commands
+            # 模式2: 重复相同或相似的命令
             if len(set(last_3_commands)) <= 2 and len(last_3_commands) == 3:
                 reflexions.append("🔴 PATTERN DETECTED: Repeating similar actions!")
                 reflexions.append("   → REFLEXION: Doing the same thing won't change the result.")
                 reflexions.append("   → SUGGESTED ACTION: Try a different approach or move on.")
             
-            # Pattern 3: Consecutive failures
+            # 模式3: 连续失败
             failed_count = sum(1 for entry in recent[-3:] if not entry['decision'].get('success', True))
             if failed_count >= 2:
                 reflexions.append("🔴 PATTERN DETECTED: Multiple failures!")
@@ -1493,7 +1497,7 @@ Now follow the ReAct pattern:"""
                     reflexions.append(f"   → ERRORS: {'; '.join(filter(None, last_errors))[:150]}")
                 reflexions.append("   → SUGGESTED ACTION: Check requirements or try merchant instead.")
         
-        # Pattern 4: Long time without trade progress
+        # 模式4: 长时间无trade进展
         if len(recent) >= 5:
             last_5_actions = [entry['decision'].get('action') for entry in recent[-5:]]
             if 'trade' not in last_5_actions and last_5_actions.count('send') >= 2:
@@ -1501,7 +1505,7 @@ Now follow the ReAct pattern:"""
                 reflexions.append("   → REFLEXION: Negotiations are taking too long.")
                 reflexions.append("   → SUGGESTED ACTION: Either send trade NOW or trade with merchant.")
         
-        # Add reflexion to observations
+        # 将reflexion添加到observations
         if reflexions:
             observations.append("\n" + "="*60)
             observations.append("🧠 SELF-REFLEXION (Analyze your recent behavior):")
@@ -1511,7 +1515,7 @@ Now follow the ReAct pattern:"""
         return "\n".join(observations)
 
     def _build_prompt(self, context: Dict) -> str:
-        """Build prompt"""
+        """构建提示词"""
         villager = context.get('villager', {})
         time_info = context.get('time', '')
         action_status = context.get('action_status', {})
@@ -1519,19 +1523,19 @@ Now follow the ReAct pattern:"""
         messages = context.get('messages', [])
         villagers = context.get('villagers', [])
         
-        # Get item information
+        # 获取物品信息
         inventory = villager.get('inventory', {})
         items = inventory.get('items', {})
         money = inventory.get('money', 0)
         
-        # Analyze current status
+        # 分析当前状态
         stamina = villager.get('stamina', 0)
         max_stamina = villager.get('max_stamina', 100)
         occupation = villager.get('occupation', 'Unknown')
         has_submitted = villager.get('has_submitted_action', False)
         has_slept = villager.get('has_slept', False)
         
-        # Analyze resource needs
+        # 分析资源需求
         resource_analysis = ""
         if occupation == 'farmer':
             seed_count = items.get('seed', 0)
@@ -1555,16 +1559,16 @@ Now follow the ReAct pattern:"""
             else:
                 resource_analysis += " ✓ Ready to build house!"
         
-        # Analyze Stamina status
+        # 分析体力状况
         stamina_analysis = ""
         if stamina < 30:
-            stamina_analysis = "⚠️ Severely low stamina, recover immediately!"
+            stamina_analysis = "⚠️ 体力严重不足，需要立即恢复！"
         elif stamina < 50:
-            stamina_analysis = "⚠️ Low stamina, consider recovering"
+            stamina_analysis = "⚠️ 体力较低，建议考虑恢复体力"
         else:
-            stamina_analysis = "✓ Sufficient stamina"
+            stamina_analysis = "✓ 体力充足"
         
-        # Analyze sleep needs
+        # 分析睡眠需求
         sleep_analysis = ""
         if not has_slept and 'evening' in time_info.lower():
             sleep_analysis = "⚠️ Evening - Should sleep to avoid penalty"
@@ -1573,19 +1577,19 @@ Now follow the ReAct pattern:"""
         else:
             sleep_analysis = "✓ Already slept today"
         
-        # Determine current time segment
+        # 判断当前时段
         is_morning = 'morning' in time_info.lower()
         is_noon = 'noon' in time_info.lower() or 'afternoon' in time_info.lower()
         is_evening = 'evening' in time_info.lower()
         
-        # Suggestions for current segment
+        # 当前时段建议
         segment_advice = ""
         if is_morning or is_noon:
             segment_advice = "PRODUCTION TIME - Focus on buying resources and producing"
         elif is_evening:
             segment_advice = "EVENING TIME - Should sleep if not yet slept today"
         
-        # Get Message and Trade information
+        # 获取消息和交易信息
         messages = self.get_messages()
         trades_received = self.get_trades_received()
         trades_sent = self.get_trades_sent()
@@ -1710,14 +1714,14 @@ Return JSON decision format."""
         return prompt
     
     def _parse_react_decision(self, decision_text: str) -> Dict:
-        """Parse ReAct decision"""
+        """解析ReAct决策"""
         try:
             lines = decision_text.strip().split('\n')
             thought = ""
             action = "idle"
             reason = "No reasoning provided"
             
-            # Parse THOUGHT and ACTION
+            # 解析THOUGHT和ACTION
             for line in lines:
                 line = line.strip()
                 if line.startswith('THOUGHT:'):
@@ -1725,7 +1729,7 @@ Return JSON decision format."""
                     reason = thought
                 elif line.startswith('ACTION:'):
                     action_line = line[7:].strip()
-                    # Parse action
+                    # 解析动作
                     parts = action_line.split()
                     if parts:
                         action = parts[0].lower()
@@ -1782,7 +1786,7 @@ Return JSON decision format."""
                                 "command": action_line
                             }
                         elif action == "prepare" and len(parts) >= 2:
-                            # Format: prepare trade_1 or prepare 1
+                            # 格式: prepare trade_1 或 prepare 1
                             trade_id = parts[1]
                             if not trade_id.startswith('trade_'):
                                 trade_id = f"trade_{trade_id}"
@@ -1793,7 +1797,7 @@ Return JSON decision format."""
                                 "trade_id": trade_id
                             }
                         elif action == "confirm" and len(parts) >= 2:
-                            # Format: confirm trade_1 or confirm 1
+                            # 格式: confirm trade_1 或 confirm 1
                             trade_id = parts[1]
                             if not trade_id.startswith('trade_'):
                                 trade_id = f"trade_{trade_id}"
@@ -1804,7 +1808,7 @@ Return JSON decision format."""
                                 "trade_id": trade_id
                             }
                         elif action == "abort" and len(parts) >= 2:
-                            # Format: abort trade_1 or abort 1
+                            # 格式: abort trade_1 或 abort 1
                             trade_id = parts[1]
                             if not trade_id.startswith('trade_'):
                                 trade_id = f"trade_{trade_id}"
@@ -1815,7 +1819,7 @@ Return JSON decision format."""
                                 "trade_id": trade_id
                             }
                         elif action == "accept" and len(parts) >= 2:
-                            # Format: accept trade_1
+                            # 格式: accept trade_1
                             trade_id = parts[1]
                             if not trade_id.startswith('trade_'):
                                 trade_id = f"trade_{trade_id}"
@@ -1826,7 +1830,7 @@ Return JSON decision format."""
                                 "trade_id": trade_id
                             }
                         elif action == "reject" and len(parts) >= 2:
-                            # Format: reject trade_1
+                            # 格式: reject trade_1
                             trade_id = parts[1]
                             if not trade_id.startswith('trade_'):
                                 trade_id = f"trade_{trade_id}"
@@ -1837,7 +1841,7 @@ Return JSON decision format."""
                                 "trade_id": trade_id
                             }
                         elif action == "cancel" and len(parts) >= 2:
-                            # Format: cancel trade_1
+                            # 格式: cancel trade_1
                             trade_id = parts[1]
                             if not trade_id.startswith('trade_'):
                                 trade_id = f"trade_{trade_id}"
@@ -1848,7 +1852,7 @@ Return JSON decision format."""
                                 "trade_id": trade_id
                             }
                         elif action == "confirm" and len(parts) >= 2:
-                            # Format: confirm trade_1
+                            # 格式: confirm trade_1
                             trade_id = parts[1]
                             if not trade_id.startswith('trade_'):
                                 trade_id = f"trade_{trade_id}"
@@ -1859,16 +1863,16 @@ Return JSON decision format."""
                                 "trade_id": trade_id
                             }
                         elif action == "trade" and len(parts) >= 6:
-                            # Correct format: trade <NodeID> <buy/sell> <Item> <Quantity> <total price>
+                            # 正确的格式: trade <节点ID> <buy/sell> <物品> <数量> <总价>
                             trade_action = parts[2].lower()
                             if trade_action not in ['buy', 'sell']:
-                                # If an incorrect action is used, try to fix it
+                                # 如果使用了错误的动作，尝试修正
                                 if trade_action in ['offer', 'purchase']:
                                     trade_action = 'buy'
                                 elif trade_action in ['sell_to', 'give']:
                                     trade_action = 'sell'
                                 else:
-                                    trade_action = 'buy'  # default
+                                    trade_action = 'buy'  # 默认
                             
                             return {
                                 "action": "trade",
@@ -1878,7 +1882,7 @@ Return JSON decision format."""
                                 "trade_action": trade_action,
                                 "item": parts[3],
                                 "quantity": int(parts[4]),
-                                "price": int(parts[5])  # total price
+                                "price": int(parts[5])  # 总价
                             }
                         else:
                             return {
@@ -1890,13 +1894,13 @@ Return JSON decision format."""
             return {"action": "idle", "reason": reason, "command": "idle"}
             
         except Exception as e:
-            print(f"[AI Agent] ✗ ReAct parsing failed: {e}")
+            print(f"[AI Agent] ✗ ReAct解析失败: {e}")
             return {"action": "idle", "reason": f"Parse error: {str(e)}", "command": "idle"}
 
     def _parse_decision(self, decision_text: str) -> Dict:
-        """Parse the decision returned by GPT"""
+        """解析GPT返回的决策"""
         try:
-            # Try to extract JSON
+            # 尝试提取JSON
             import re
             json_match = re.search(r'\{.*\}', decision_text, re.DOTALL)
             if json_match:
@@ -1904,25 +1908,25 @@ Return JSON decision format."""
                 command = decision.get('command', 'idle')
                 reason = decision.get('reason', 'No reason provided')
                 
-                # Handle compound commands (e.g., "buy seed 5 && produce" or "buy seed 5; produce")
+                # 处理复合命令（如 "buy seed 5 && produce" 或 "buy seed 5; produce"）
                 if '&&' in command or ';' in command:
                     separator = '&&' if '&&' in command else ';'
                     commands = [cmd.strip() for cmd in command.split(separator)]
-                    # Execute only the first command
+                    # 只执行第一个命令
                     command = commands[0]
-                    print(f"[AI Agent] Detected compound command, executing only the first: {command}")
+                    print(f"[AI Agent] 检测到复合命令，只执行第一个: {command}")
                 
-                # Validate command format
+                # 验证命令格式
                 parts = command.split()
                 if not parts:
                     return {"action": "idle", "reason": "Empty command", "command": "idle"}
                 
                 action = parts[0].lower()
                 
-                # Build return result
+                # 构建返回结果
                 result = {"action": action, "reason": reason, "command": command}
                 
-                # Add specific parameters
+                # 添加特定参数
                 if action == "buy" and len(parts) >= 3:
                     try:
                         result["item"] = parts[1]
@@ -1943,7 +1947,7 @@ Return JSON decision format."""
                 
                 return result
             else:
-                # If no JSON is found, try a simple parse
+                # 如果没有找到JSON，尝试简单解析
                 lines = decision_text.split('\n')
                 action = "idle"
                 reason = decision_text
@@ -1965,12 +1969,12 @@ Return JSON decision format."""
                 
                 return {"action": action, "reason": reason, "command": action}
         except Exception as e:
-            print(f"[AI Agent] ✗ Parsing decision failed: {e}")
+            print(f"[AI Agent] ✗ 解析决策失败: {e}")
             return {"action": "idle", "reason": f"Parse error: {str(e)}", "command": "idle"}
     
     def make_decision_and_act(self):
-        """Make a decision and ExecuteAction"""
-        # Collect context info
+        """做出决策并执行行动"""
+        # 收集上下文信息
         context = {
             'villager': self.get_villager_status() or {},
             'time': self.get_current_time(),
@@ -1982,70 +1986,70 @@ Return JSON decision format."""
             'villagers': self.get_online_villagers()
         }
         
-        # Clean up old Trade request records
+        # 清理旧的交易请求记录
         self.clear_old_trade_requests()
         
-        # Analyze P2P Trade opportunities
+        # 分析P2P交易机会
         context['p2p_opportunities'] = self.analyze_p2p_opportunities(context)
         
-        # Check whether an action has already been submitted
+        # 检查是否已经提交了行动
         villager = context['villager']
         has_submitted = villager.get('has_submitted_action', False)
         
-        # Generate decision
-        print(f"[AI Agent] {self.villager_name} is thinking...")
+        # 生成决策
+        print(f"[AI Agent] {self.villager_name} 正在思考...")
         decision = self.generate_decision(context)
         
         action = decision.get('action', 'idle')
         reason = decision.get('reason', 'No reason provided')
         command = decision.get('command', action)
         
-        print(f"[AI Agent] {self.villager_name} Thought: {reason}")
-        print(f"[AI Agent] {self.villager_name} Action: {command}")
-        print(f"[AI Agent] Decision details: {decision}")
+        print(f"[AI Agent] {self.villager_name} 思考: {reason}")
+        print(f"[AI Agent] {self.villager_name} 行动: {command}")
+        print(f"[AI Agent] 决策详情: {decision}")
         
-        # If an action has already been submitted, restrict the types of actions that can be executed
+        # 如果已经提交了行动，限制可执行的行动类型
         if has_submitted:
-            print(f"[AI Agent] {self.villager_name} has already submitted an action; only non-time-advancing actions can be executed...")
+            print(f"[AI Agent] {self.villager_name} 已经提交了行动，只能执行非推进时间的行动...")
             
-            # Define disallowed actions (these advance time)
+            # 定义不允许的行动（这些会推进时间）
             forbidden_actions = ['produce', 'sleep', 'idle']
             
             if action in forbidden_actions:
-                print(f"[AI Agent] ⚠️ Submitted action; cannot execute {action}. Switching to handling messages and trades.")
+                print(f"[AI Agent] ⚠️ 已提交行动，不能执行 {action}，改为处理消息和交易")
                 
-                # Check for pending trade requests
+                # 检查是否有待处理的交易请求
                 trades_received = context.get('trades_received', [])
                 if trades_received:
-                    print(f"[AI Agent] {self.villager_name} found {len(trades_received)} pending trade request(s)")
+                    print(f"[AI Agent] {self.villager_name} 发现 {len(trades_received)} 个待处理的交易请求")
                     self._handle_pending_trades(trades_received, context)
                 
-                # Check for sent trades that require confirmation
+                # 检查是否有需要确认的已发送交易
                 trades_sent = context.get('trades_sent', [])
                 if trades_sent:
-                    print(f"[AI Agent] {self.villager_name} checking {len(trades_sent)} sent trade(s)")
+                    print(f"[AI Agent] {self.villager_name} 检查 {len(trades_sent)} 个已发送的交易")
                     self._handle_sent_trades_confirmation(trades_sent, context)
                 
-                # Check for new messages
+                # 检查是否有新消息
                 messages = context.get('messages', [])
                 unread_messages = [msg for msg in messages if not msg.get('read', False)]
                 if unread_messages:
-                    print(f"[AI Agent] {self.villager_name} found {len(unread_messages)} unread message(s)")
-                    # Check for trade completion messages
+                    print(f"[AI Agent] {self.villager_name} 发现 {len(unread_messages)} 条未读消息")
+                    # 检查是否有交易完成消息
                     for msg in unread_messages:
                         content = msg.get('content', '')
-                        if 'Trade' in content and 'completed' in content:
-                            print(f"[AI Agent] {self.villager_name} received a trade completion message, refreshing state...")
-                            # Extract Trade ID from message
+                        if '交易' in content and '已完成' in content:
+                            print(f"[AI Agent] {self.villager_name} 收到交易完成消息，刷新状态...")
+                            # 从消息中提取交易ID
                             import re
                             trade_id_match = re.search(r'trade_\d+', content)
                             if trade_id_match:
                                 trade_id = trade_id_match.group()
-                                print(f"[AI Agent] {self.villager_name} cleaning up Trade {trade_id}")
+                                print(f"[AI Agent] {self.villager_name} 清理交易 {trade_id}")
                                 
-                                # Clean up completed trades in sent_trades
+                                # 清理sent_trades中的已完成交易
                                 try:
-                                    # Get current sent trades
+                                    # 获取当前sent_trades
                                     result = self.execute_action("mytrades")
                                     if isinstance(result, tuple):
                                         success, data = result
@@ -2057,21 +2061,21 @@ Return JSON decision format."""
                                         trades = data.get('trades', [])
                                         for trade in trades:
                                             if trade.get('trade_id') == trade_id:
-                                                # Mark as completed
+                                                # 标记为已完成
                                                 trade['status'] = 'completed'
-                                                print(f"[AI Agent] ✓ {self.villager_name} marked trade {trade_id} as completed")
+                                                print(f"[AI Agent] ✓ {self.villager_name} 已标记交易 {trade_id} 为完成")
                                                 break
                                 except Exception as e:
-                                    print(f"[AI Agent] ✗ {self.villager_name} exception when updating trade status: {e}")
+                                    print(f"[AI Agent] ✗ {self.villager_name} 更新交易状态异常: {e}")
                             
-                            # Refresh villager status to get the latest trade results
+                            # 刷新村民状态以获取最新信息
                             try:
-                                print(f"[AI Agent] {self.villager_name} refreshing status to fetch latest trade results...")
-                                # Add state refresh logic here
+                                print(f"[AI Agent] {self.villager_name} 刷新状态以获取最新交易结果...")
+                                # 这里可以添加状态刷新逻辑
                             except Exception as e:
-                                print(f"[AI Agent] ✗ {self.villager_name} exception when refreshing status: {e}")
+                                print(f"[AI Agent] ✗ {self.villager_name} 刷新状态异常: {e}")
                     
-                    # Mark messages as read
+                    # 标记消息为已读
                     for msg in unread_messages:
                         try:
                             requests.post(f"{self.villager_url}/messages/mark_read",
@@ -2079,13 +2083,13 @@ Return JSON decision format."""
                         except:
                             pass
                 
-                print(f"[AI Agent] {self.villager_name} finished handling messages and trades, waiting for time to advance...")
+                print(f"[AI Agent] {self.villager_name} 已完成消息和交易处理，等待时间推进...")
                 return
             
-            # If the action is allowed (e.g., eat, trades, mytrades, trade, send, etc.), continue to execute
-            print(f"[AI Agent] {self.villager_name} executing allowed action: {action}")
+            # 如果行动是允许的（如eat, trades, mytrades, trade, send等），继续执行
+            print(f"[AI Agent] {self.villager_name} 执行允许的行动: {action}")
         
-        # Execute action
+        # 执行行动
         success = False
         error_message = None
         
@@ -2093,8 +2097,8 @@ Return JSON decision format."""
             success = self.execute_action("buy", 
                                         item=decision.get('item', 'seed'), 
                                         quantity=decision.get('quantity', 1))
-            # Buying does not consume action points and does not automatically produce
-            # Let the AI decide whether to produce in the next round
+            # 购买不消耗行动点，但也不自动生产
+            # 让AI在下一轮决策中决定是否生产
         elif action == "sell":
             success = self.execute_action("sell", 
                                         item=decision.get('item', 'wheat'), 
@@ -2112,7 +2116,7 @@ Return JSON decision format."""
         elif action == "price":
             success = self.execute_action("price")
             if success:
-                # Get price information and record it
+                # 获取价格信息并记录
                 prices = self.get_merchant_prices()
                 if prices and self.decision_history:
                     last_decision = self.decision_history[-1]
@@ -2120,7 +2124,7 @@ Return JSON decision format."""
         elif action == "trades":
             success = self.execute_action("trades")
             if success:
-                # Get trade information and record it
+                # 获取交易信息并记录
                 trades = self.get_trades_received()
                 if trades and self.decision_history:
                     last_decision = self.decision_history[-1]
@@ -2128,7 +2132,7 @@ Return JSON decision format."""
         elif action == "mytrades":
             success = self.execute_action("mytrades")
             if success:
-                # Get sent trade information and record it
+                # 获取发送交易信息并记录
                 trades = self.get_trades_sent()
                 if trades and self.decision_history:
                     last_decision = self.decision_history[-1]
@@ -2146,13 +2150,13 @@ Return JSON decision format."""
                                         content=decision.get('content', 'Hello!'),
                                         type='private')
             if success:
-                # Record the sent message
+                # 记录已发送的消息
                 self.sent_messages_tracker.append({
                     'target': decision.get('target'),
                     'content': decision.get('content'),
                     'timestamp': time.time()
                 })
-                # Keep only the most recent 10 messages
+                # 只保留最近10条消息
                 if len(self.sent_messages_tracker) > 10:
                     self.sent_messages_tracker = self.sent_messages_tracker[-10:]
         elif action == "accept":
@@ -2184,18 +2188,18 @@ Return JSON decision format."""
                 success = False
                 error_message = "Confirm trade failed: No trade ID provided"
         else:
-            print(f"[AI Agent] ✗ Unknown action: {action}")
+            print(f"[AI Agent] ✗ 未知行动: {action}")
             success = False
             error_message = f"Unknown action: {action}"
         
         if success:
-            print(f"[AI Agent] ✓ {self.villager_name} Successfully executed: {action}")
+            print(f"[AI Agent] ✓ {self.villager_name} 成功执行: {action}")
         else:
-            print(f"[AI Agent] ✗ {self.villager_name} Execution failed: {action}")
+            print(f"[AI Agent] ✗ {self.villager_name} 执行失败: {action}")
             if error_message:
-                print(f"[AI Agent] Error info: {error_message}")
+                print(f"[AI Agent] 错误信息: {error_message}")
         
-        # Update decision history with execution result
+        # 更新决策历史，记录执行结果
         if self.decision_history:
             last_decision = self.decision_history[-1]
             last_decision['decision']['success'] = success
@@ -2205,67 +2209,67 @@ Return JSON decision format."""
         return success
     
     def start_auto_decision_loop(self, interval: int = 30):
-        """Start automatic decision loop"""
+        """启动自动决策循环"""
         if self.running:
-            print("[AI Agent] Automatic decision loop is already running")
+            print("[AI Agent] 自动决策循环已在运行")
             return
         
         self.running = True
         self.decision_thread = threading.Thread(target=self._decision_loop, args=(interval,), daemon=True)
         self.decision_thread.start()
-        print(f"[AI Agent] Started automatic decision loop, interval {interval} seconds")
+        print(f"[AI Agent] 启动自动决策循环，间隔 {interval} 秒")
     
     def stop_auto_decision_loop(self):
-        """Stop automatic decision loop"""
+        """停止自动决策循环"""
         self.running = False
         if self.decision_thread:
             self.decision_thread.join()
-        print("[AI Agent] Automatic decision loop stopped")
+        print("[AI Agent] 自动决策循环已停止")
     
     def _decision_loop(self, interval: int):
-        """Decision loop"""
+        """决策循环"""
         while self.running:
             try:
                 self.make_decision_and_act()
                 time.sleep(interval)
             except Exception as e:
-                print(f"[AI Agent] Decision loop exception: {e}")
+                print(f"[AI Agent] 决策循环异常: {e}")
                 time.sleep(interval)
     
     def run_interactive_mode(self):
-        """Run interactive mode"""
-        print(f"[AI Agent] Starting interactive mode")
+        """运行交互模式"""
+        print(f"[AI Agent] 启动交互模式")
         
-        # Check connection
+        # 检查连接
         if not self.check_connection():
-            print("[AI Agent] ✗ Unable to connect to Villager Node")
+            print("[AI Agent] ✗ 无法连接到村民节点")
             return
         
-        # Check whether villager has been created
+        # 检查村民是否已创建
         villager_status = self.get_villager_status()
         if not villager_status:
-            print("[AI Agent] Villager not created, please create a villager first")
-            name = input("Villager name: ").strip()
-            occupation = input("Occupation (farmer/chef/carpenter): ").strip()
-            gender = input("Gender (male/female): ").strip()
-            personality = input("Personality: ").strip()
+            print("[AI Agent] 村民未创建，请先创建村民")
+            name = input("村民名字: ").strip()
+            occupation = input("职业 (farmer/chef/carpenter): ").strip()
+            gender = input("性别 (male/female): ").strip()
+            personality = input("性格: ").strip()
             
             if not self.create_villager(name, occupation, gender, personality):
-                print("[AI Agent] ✗ Villager creation failed")
+                print("[AI Agent] ✗ 村民创建失败")
                 return
         else:
-            # When reconnecting, update villager info
+            # 重新连接时，更新村民信息
             self.villager_info = villager_status
             self.villager_name = villager_status.get('name', 'Unknown')
             self.villager_occupation = villager_status.get('occupation', 'Unknown')
         
-        print(f"[AI Agent] ✓ Villager {self.villager_name} is ready")
-        print("[AI Agent] Enter command:")
-        print("  auto <interval_seconds> - start automatic decision")
-        print("  decision - make one manual decision")
-        print("  status - show status")
-        print("  history - show decision history")
-        print("  quit - quit")
+        print(f"[AI Agent] ✓ 村民 {self.villager_name} 准备就绪")
+        print("[AI Agent] 输入命令:")
+        print("  auto <间隔秒数> - 启动自动决策")
+        print("  decision - 手动决策一次")
+        print("  status - 查看状态")
+        print("  history - 查看决策历史")
+        print("  quit - 退出")
         
         while True:
             try:
@@ -2285,16 +2289,16 @@ Return JSON decision format."""
                 elif cmd == "history":
                     self._show_history()
                 else:
-                    print("Unknown command")
+                    print("未知命令")
             except KeyboardInterrupt:
-                print("\n[AI Agent] Exiting...")
+                print("\n[AI Agent] 退出中...")
                 self.stop_auto_decision_loop()
                 break
             except Exception as e:
-                print(f"[AI Agent] Error: {e}")
+                print(f"[AI Agent] 错误: {e}")
     
     def _show_status(self):
-        """Show status"""
+        """显示状态"""
         context = {
             'villager': self.get_villager_status() or {},
             'time': self.get_current_time(),
@@ -2304,46 +2308,46 @@ Return JSON decision format."""
             'villagers': self.get_online_villagers()
         }
         
-        print(f"\nCurrent status:")
-        print(f"Time: {context['time']}")
-        print(f"Villager: {context['villager'].get('name', 'Unknown')}")
-        print(f"Stamina: {context['villager'].get('stamina', 0)}/{context['villager'].get('max_stamina', 100)}")
-        print(f"Money: {context['villager'].get('inventory', {}).get('money', 0)}")
-        print(f"Item: {context['villager'].get('inventory', {}).get('items', {})}")
-        print(f"SubmittedAction: {context['villager'].get('has_submitted_action', False)}")
-        print(f"Message count: {len(context['messages'])}")
-        print(f"Online villagers: {len(context['villagers'])}")
+        print(f"\n当前状态:")
+        print(f"时间: {context['time']}")
+        print(f"村民: {context['villager'].get('name', 'Unknown')}")
+        print(f"体力: {context['villager'].get('stamina', 0)}/{context['villager'].get('max_stamina', 100)}")
+        print(f"货币: {context['villager'].get('inventory', {}).get('money', 0)}")
+        print(f"物品: {context['villager'].get('inventory', {}).get('items', {})}")
+        print(f"已提交行动: {context['villager'].get('has_submitted_action', False)}")
+        print(f"消息数: {len(context['messages'])}")
+        print(f"在线村民: {len(context['villagers'])}")
     
     def _show_history(self):
-        """Show decision history"""
+        """显示决策历史"""
         if not self.decision_history:
-            print("No decision history")
+            print("没有决策历史")
             return
         
-        print(f"\nDecision history (last {min(5, len(self.decision_history))}):")
+        print(f"\n决策历史 (最近 {min(5, len(self.decision_history))} 条):")
         for i, record in enumerate(self.decision_history[-5:]):
             print(f"{i+1}. {record['timestamp']}")
-            print(f"   Action: {record['decision'].get('action', 'unknown')}")
-            print(f"   Reason: {record['decision'].get('reason', 'No reason')[:100]}...")
+            print(f"   行动: {record['decision'].get('action', 'unknown')}")
+            print(f"   理由: {record['decision'].get('reason', 'No reason')[:100]}...")
 
 
 def main():
     import argparse
-    parser = argparse.ArgumentParser(description='AIVillager Agent')
-    parser.add_argument('--port', type=int, required=True, help='Villager node port')
-    parser.add_argument('--coordinator', type=int, default=5000, help='Coordinator port')
-    parser.add_argument('--merchant', type=int, default=5001, help='Merchant port')
+    parser = argparse.ArgumentParser(description='AI村民代理')
+    parser.add_argument('--port', type=int, required=True, help='村民节点端口号')
+    parser.add_argument('--coordinator', type=int, default=5000, help='协调器端口')
+    parser.add_argument('--merchant', type=int, default=5001, help='商人端口')
     parser.add_argument('--api-key', type=str, help='OpenAI API Key')
-    parser.add_argument('--model', type=str, default='gpt-4o', help='GPT model')
-    parser.add_argument('--react', action='store_true', help='Use ReAct reasoning mode')
-    parser.add_argument('--auto', type=int, help='Auto mode interval seconds')
+    parser.add_argument('--model', type=str, default='gpt-4o', help='GPT模型')
+    parser.add_argument('--react', action='store_true', help='使用ReAct推理模式')
+    parser.add_argument('--auto', type=int, help='自动模式间隔秒数')
     args = parser.parse_args()
     
-    # Use provided API key or environment variable
+    # 使用提供的API Key或环境变量
     api_key = args.api_key or os.getenv('OPENAI_API_KEY')
     if not api_key:
-        print("Error: OpenAI API Key not provided")
-        print("Please use the --api-key argument or set the OPENAI_API_KEY environment variable")
+        print("错误: 未提供OpenAI API Key")
+        print("请使用 --api-key 参数或设置 OPENAI_API_KEY 环境变量")
         sys.exit(1)
     
     agent = AIVillagerAgent(
@@ -2360,4 +2364,3 @@ def main():
 
 if __name__ == '__main__':
     main()
-

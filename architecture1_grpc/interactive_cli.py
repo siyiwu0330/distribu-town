@@ -1,5 +1,5 @@
 """
-交互式CLI客户端 - 控制单个村民节点 (gRPC版本)
+交互式CLI客户端 - 控制单个VillagerNode (gRPC版本)
 完全复制REST版本的功能
 """
 
@@ -15,17 +15,17 @@ import town_pb2_grpc
 
 
 class VillagerCLI:
-    """村民节点交互式CLI"""
+    """VillagerNode交互式CLI"""
     
     def __init__(self, villager_port: int, coordinator_port: int = 50051, merchant_port: int = 50052):
         self.villager_address = f"localhost:{villager_port}"
         self.coordinator_address = f"localhost:{coordinator_port}"
         self.merchant_address = f"localhost:{merchant_port}"
         self.villager_port = villager_port
-        self.node_id = None  # 将在首次获取信息时设置
-        self.pending_trades = {}  # 当前等待响应的交易
+        self.node_id = None  # 将在首次Getinformation时Set
+        self.pending_trades = {}  # 当前Waiting响应的Trade
         
-        # 消息系统
+        # Message系统
         self.received_messages = []
     
     def _get_villager_stub(self):
@@ -54,7 +54,7 @@ class VillagerCLI:
             return False
     
     def get_villager_info(self) -> Optional[dict]:
-        """获取村民信息"""
+        """GetVillagerinformation"""
         try:
             channel, stub = self._get_villager_stub()
             info = stub.GetInfo(town_pb2.Empty())
@@ -74,11 +74,11 @@ class VillagerCLI:
                 }
             }
         except Exception as e:
-            print(f"错误: {e}")
+            print(f"Error: {e}")
             return None
     
     def create_villager(self, name: str, occupation: str, gender: str, personality: str):
-        """创建村民"""
+        """CreateVillager"""
         try:
             channel, stub = self._get_villager_stub()
             response = stub.CreateVillager(town_pb2.CreateVillagerRequest(
@@ -90,20 +90,20 @@ class VillagerCLI:
             channel.close()
             
             if response.success:
-                print(f"\n✓ 村民创建成功!")
+                print(f"\n✓ VillagerCreateSuccess!")
                 self.display_villager_info()
             else:
-                print(f"\n✗ 创建失败: {response.message}")
+                print(f"\n✗ CreateFailed: {response.message}")
         except Exception as e:
-            print(f"\n✗ 错误: {e}")
+            print(f"\n✗ Error: {e}")
     
     def display_villager_info(self, info: dict = None):
-        """显示村民信息"""
+        """显示VillagerInfo"""
         if info is None:
             info = self.get_villager_info()
         
         if not info:
-            print("\n村民未初始化")
+            print("\nVillager未初始化")
             return
         
         print("\n" + "="*50)
@@ -111,20 +111,20 @@ class VillagerCLI:
         print("="*50)
         print(f"性别: {info['gender']}")
         print(f"性格: {info['personality']}")
-        print(f"⚡ 体力: {info['stamina']}/{info['max_stamina']}")
-        print(f"😴 已睡眠: {'是' if info['has_slept'] else '否'}")
-        print(f"\n💰 货币: {info['inventory']['money']}")
+        print(f"⚡ Stamina: {info['stamina']}/{info['max_stamina']}")
+        print(f"😴 已Sleep: {'是' if info['has_slept'] else '否'}")
+        print(f"\n💰 Money: {info['inventory']['money']}")
         
         if info['inventory']['items']:
-            print("📦 物品:")
+            print("📦 Item:")
             for item, quantity in info['inventory']['items'].items():
                 print(f"   - {item}: {quantity}")
         else:
-            print("📦 物品: 无")
+            print("📦 Item: 无")
         print("="*50)
     
     def produce(self):
-        """执行生产"""
+        """ExecuteProduction"""
         try:
             channel, stub = self._get_villager_stub()
             response = stub.Produce(town_pb2.ProduceRequest())
@@ -136,10 +136,10 @@ class VillagerCLI:
             else:
                 print(f"\n✗ {response.message}")
         except Exception as e:
-            print(f"\n✗ 错误: {e}")
+            print(f"\n✗ Error: {e}")
     
     def trade(self, action: str, item: str, quantity: int):
-        """与商人交易"""
+        """与MerchantTrade"""
         try:
             channel, stub = self._get_villager_stub()
             # action: buy or sell
@@ -158,10 +158,10 @@ class VillagerCLI:
             else:
                 print(f"\n✗ {response.message}")
         except Exception as e:
-            print(f"\n✗ 错误: {e}")
+            print(f"\n✗ Error: {e}")
     
     def sleep(self):
-        """睡眠"""
+        """Sleep"""
         try:
             channel, stub = self._get_villager_stub()
             response = stub.Sleep(town_pb2.SleepRequest())
@@ -173,10 +173,10 @@ class VillagerCLI:
             else:
                 print(f"\n✗ {response.message}")
         except Exception as e:
-            print(f"\n✗ 错误: {e}")
+            print(f"\n✗ Error: {e}")
     
     def get_current_time(self):
-        """获取当前时间"""
+        """获取当前Time"""
         try:
             channel, stub = self._get_coordinator_stub()
             time_info = stub.GetCurrentTime(town_pb2.Empty())
@@ -186,7 +186,7 @@ class VillagerCLI:
             return "Unknown"
     
     def get_node_id(self):
-        """获取本节点ID (从coordinator查询)"""
+        """获取本NodeID (从coordinatorQuery)"""
         if self.node_id:
             return self.node_id
         
@@ -209,7 +209,7 @@ class VillagerCLI:
             return self.node_id
     
     def get_all_villagers(self):
-        """获取所有村民节点"""
+        """获取所有VillagerNode"""
         try:
             channel, stub = self._get_coordinator_stub()
             response = stub.ListNodes(town_pb2.Empty())
@@ -224,26 +224,26 @@ class VillagerCLI:
                     })
             return villagers
         except Exception as e:
-            print(f"✗ 获取村民列表失败: {e}")
+            print(f"✗ 获取Villager列表Failed: {e}")
             return []
     
     def get_online_villagers(self):
-        """获取在线村民"""
+        """获取在线Villager"""
         villagers = self.get_all_villagers()
         
         if not villagers:
-            print("\n没有找到其他村民节点")
+            print("\n没有找到其他VillagerNode")
             return []
         
         print("\n" + "="*50)
-        print("  在线村民")
+        print("  在线Villager")
         print("="*50)
         
         my_node_id = self.get_node_id()
         online_list = []
         
         for v in villagers:
-            # 获取村民信息
+            # GetVillagerinformation
             try:
                 channel = grpc.insecure_channel(v['address'])
                 stub = town_pb2_grpc.VillagerNodeStub(channel)
@@ -268,7 +268,7 @@ class VillagerCLI:
         return online_list
     
     def trade_with_villager(self, target_node: str, item: str, quantity: int, price: int, offer_type: str):
-        """向村民发起交易"""
+        """向Villager发起Trade"""
         try:
             # 获取目标地址
             villagers = self.get_all_villagers()
@@ -279,7 +279,7 @@ class VillagerCLI:
                     break
             
             if not target_address:
-                print(f"\n✗ 找不到节点: {target_node}")
+                print(f"\n✗ 找不到Node: {target_node}")
                 return
             
             my_node_id = self.get_node_id()
@@ -298,19 +298,19 @@ class VillagerCLI:
             channel.close()
             
             if response.success:
-                print(f"\n✓ 交易请求已发送: {response.trade_id}")
+                print(f"\n✓ Trade请求已Send: {response.trade_id}")
                 print(f"  对方: {target_node}")
                 print(f"  内容: {offer_type} {quantity}x {item} @ {price}")
-                print(f"\n⏳ 等待 {target_node} 接受或拒绝...")
+                print(f"\n⏳ Waiting {target_node} Accept或Reject...")
                 print(f"💡 提示: 对方需要输入 'accept {response.trade_id}' 和 'confirm {response.trade_id}'")
-                print(f"   使用 'mytrades' 查看此交易的状态\n")
+                print(f"   使用 'mytrades' 查看此Trade的状态\n")
             else:
                 print(f"\n✗ {response.message}")
         except Exception as e:
-            print(f"\n✗ 错误: {e}")
+            print(f"\n✗ Error: {e}")
     
     def show_my_pending_trades(self):
-        """查看我的所有交易（发送的和收到的）"""
+        """查看我的所有Trade（Send的和收到的）"""
         try:
             my_node_id = self.get_node_id()
             
@@ -322,11 +322,11 @@ class VillagerCLI:
             channel.close()
             
             if not response.trades:
-                print("\n你没有相关交易\n")
+                print("\n你没有相关Trade\n")
                 return
             
             print("\n" + "="*50)
-            print("  我的交易")
+            print("  我的Trade")
             print("="*50)
             
             # 分类显示
@@ -339,66 +339,66 @@ class VillagerCLI:
                 else:
                     received_trades.append(trade)
             
-            # 显示我发起的交易
+            # 显示我发起的Trade
             if sent_trades:
-                print("\n📤 我发起的交易:")
+                print("\n📤 我发起的Trade:")
                 for trade in sent_trades:
-                    print(f"\n交易ID: {trade.trade_id}")
+                    print(f"\nTradeID: {trade.trade_id}")
                     print(f"  对方: {trade.target_id}")
                     print(f"  类型: {trade.offer_type}")
-                    print(f"  物品: {trade.item} x{trade.quantity}")
-                    print(f"  价格: {trade.price}")
+                    print(f"  Item: {trade.item} x{trade.quantity}")
+                    print(f"  Price: {trade.price}")
                     
                     # 根据状态显示不同的提示
                     if trade.status == 'accepted':
-                        print(f"  状态: ✓ 对方已接受（等待双方确认）")
+                        print(f"  状态: ✓ 对方已Accept（Waiting双方Confirm）")
                         if not trade.initiator_confirmed:
                             print(f"  💡 操作: confirm {trade.trade_id}")
                         elif not trade.target_confirmed:
-                            print(f"  💡 等待: 对方确认中...")
+                            print(f"  💡 Waiting: 对方Confirm中...")
                         else:
-                            print(f"  💡 状态: 双方已确认，交易将自动完成")
+                            print(f"  💡 状态: 双方已Confirm，Trade将自动完成")
                     elif trade.status == 'pending':
-                        print(f"  状态: ⏳ 等待对方接受")
-                        print(f"  💡 操作: 等待对方响应或 cancel {trade.trade_id}")
+                        print(f"  状态: ⏳ Waiting对方Accept")
+                        print(f"  💡 操作: Waiting对方响应或 cancel {trade.trade_id}")
                     elif trade.status == 'rejected':
-                        print(f"  状态: ✗ 已被拒绝")
+                        print(f"  状态: ✗ 已被Reject")
                     elif trade.status == 'completed':
-                        print(f"  状态: ✓ 交易完成")
+                        print(f"  状态: ✓ Trade完成")
             
-            # 显示我收到的交易
+            # 显示我收到的Trade
             if received_trades:
-                print("\n📥 我收到的交易:")
+                print("\n📥 我收到的Trade:")
                 for trade in received_trades:
-                    print(f"\n交易ID: {trade.trade_id}")
+                    print(f"\nTradeID: {trade.trade_id}")
                     print(f"  发起方: {trade.initiator_id}")
                     print(f"  类型: {trade.offer_type}")
-                    print(f"  物品: {trade.item} x{trade.quantity}")
-                    print(f"  价格: {trade.price}")
+                    print(f"  Item: {trade.item} x{trade.quantity}")
+                    print(f"  Price: {trade.price}")
                     
                     # 根据状态显示不同的提示
                     if trade.status == 'pending':
-                        print(f"  状态: ⏳ 待处理")
+                        print(f"  状态: ⏳ 待Handle")
                         print(f"  💡 操作: accept {trade.trade_id} 或 reject {trade.trade_id}")
                     elif trade.status == 'accepted':
-                        print(f"  状态: ✓ 已接受（等待双方确认）")
+                        print(f"  状态: ✓ 已Accept（Waiting双方Confirm）")
                         if not trade.target_confirmed:
                             print(f"  💡 操作: confirm {trade.trade_id}")
                         elif not trade.initiator_confirmed:
-                            print(f"  💡 等待: 对方确认中...")
+                            print(f"  💡 Waiting: 对方Confirm中...")
                         else:
-                            print(f"  💡 状态: 双方已确认，交易将自动完成")
+                            print(f"  💡 状态: 双方已Confirm，Trade将自动完成")
                     elif trade.status == 'rejected':
-                        print(f"  状态: ✗ 已拒绝")
+                        print(f"  状态: ✗ 已Reject")
                     elif trade.status == 'completed':
-                        print(f"  状态: ✓ 交易完成")
+                        print(f"  状态: ✓ Trade完成")
             
             print("="*50 + "\n")
         except Exception as e:
-            print(f"\n✗ 错误: {e}")
+            print(f"\n✗ Error: {e}")
     
     def check_pending_trades(self):
-        """查看待处理的交易"""
+        """查看待Handle的Trade"""
         try:
             my_node_id = self.get_node_id()
             
@@ -410,41 +410,41 @@ class VillagerCLI:
             channel.close()
             
             if not response.trades:
-                print("\n没有待处理的交易请求\n")
+                print("\n没有待Handle的Trade请求\n")
                 return
             
             print("\n" + "="*50)
-            print("  待处理的交易请求")
+            print("  待Handle的Trade请求")
             print("="*50)
             for trade in response.trades:
-                print(f"\n交易ID: {trade.trade_id}")
+                print(f"\nTradeID: {trade.trade_id}")
                 print(f"  发起方: {trade.initiator_id}")
                 print(f"  类型: {trade.offer_type}")
-                print(f"  物品: {trade.item} x{trade.quantity}")
-                print(f"  价格: {trade.price}")
+                print(f"  Item: {trade.item} x{trade.quantity}")
+                print(f"  Price: {trade.price}")
                 
                 # 根据状态显示不同的提示
                 if trade.status == 'pending':
-                    print(f"  状态: ⏳ 待处理")
+                    print(f"  状态: ⏳ 待Handle")
                     print(f"  💡 操作: accept {trade.trade_id} 或 reject {trade.trade_id}")
                 elif trade.status == 'accepted':
-                    print(f"  状态: ✓ 已接受（等待双方确认）")
+                    print(f"  状态: ✓ 已Accept（Waiting双方Confirm）")
                     if not trade.target_confirmed:
                         print(f"  💡 操作: confirm {trade.trade_id}")
                     elif not trade.initiator_confirmed:
-                        print(f"  💡 等待: 对方确认中...")
+                        print(f"  💡 Waiting: 对方Confirm中...")
                     else:
-                        print(f"  💡 状态: 双方已确认，交易将自动完成")
+                        print(f"  💡 状态: 双方已Confirm，Trade将自动完成")
                 elif trade.status == 'rejected':
-                    print(f"  状态: ✗ 已拒绝")
+                    print(f"  状态: ✗ 已Reject")
                 elif trade.status == 'completed':
-                    print(f"  状态: ✓ 交易完成")
+                    print(f"  状态: ✓ Trade完成")
             print("="*50 + "\n")
         except Exception as e:
-            print(f"\n✗ 错误: {e}")
+            print(f"\n✗ Error: {e}")
     
     def accept_trade_request(self, trade_id: str):
-        """接受交易"""
+        """AcceptTrade"""
         try:
             my_node_id = self.get_node_id()
             
@@ -457,16 +457,16 @@ class VillagerCLI:
             
             if response.success:
                 print(f"\n✓ {response.message}")
-                print(f"💡 提示: 交易已接受，现在需要双方确认")
-                print(f"   使用 'confirm {trade_id}' 确认交易")
-                print(f"   或使用 'cancel {trade_id}' 取消交易\n")
+                print(f"💡 提示: Trade已Accept，现在需要双方Confirm")
+                print(f"   使用 'confirm {trade_id}' ConfirmTrade")
+                print(f"   或使用 'cancel {trade_id}' CancelTrade\n")
             else:
                 print(f"\n✗ {response.message}\n")
         except Exception as e:
-            print(f"\n✗ 错误: {e}")
+            print(f"\n✗ Error: {e}")
     
     def confirm_trade_request(self, trade_id: str):
-        """确认交易"""
+        """ConfirmTrade"""
         try:
             my_node_id = self.get_node_id()
             
@@ -478,15 +478,15 @@ class VillagerCLI:
             channel.close()
             
             if response.success:
-                print(f"\n✓ 交易已确认")
-                print(f"   使用 'mytrades' 查看交易状态\n")
+                print(f"\n✓ Trade已Confirm")
+                print(f"   使用 'mytrades' 查看Trade状态\n")
             else:
                 print(f"\n✗ {response.message}\n")
         except Exception as e:
-            print(f"\n✗ 错误: {e}")
+            print(f"\n✗ Error: {e}")
     
     def reject_trade_request(self, trade_id: str):
-        """拒绝交易"""
+        """RejectTrade"""
         try:
             my_node_id = self.get_node_id()
             
@@ -502,10 +502,10 @@ class VillagerCLI:
             else:
                 print(f"\n✗ {response.message}\n")
         except Exception as e:
-            print(f"\n✗ 错误: {e}")
+            print(f"\n✗ Error: {e}")
     
     def cancel_trade_request(self, trade_id: str):
-        """取消交易"""
+        """CancelTrade"""
         try:
             my_node_id = self.get_node_id()
             
@@ -521,10 +521,10 @@ class VillagerCLI:
             else:
                 print(f"\n✗ {response.message}\n")
         except Exception as e:
-            print(f"\n✗ 错误: {e}")
+            print(f"\n✗ Error: {e}")
     
     def get_messages(self):
-        """获取消息列表"""
+        """获取Message列表"""
         try:
             channel, stub = self._get_villager_stub()
             response = stub.GetMessages(town_pb2.GetMessagesRequest(
@@ -546,11 +546,11 @@ class VillagerCLI:
                 })
             return messages
         except Exception as e:
-            print(f"[CLI] 获取消息失败: {e}")
+            print(f"[CLI] 获取MessageFailed: {e}")
             return []
     
     def send_message(self, target, content, message_type='private'):
-        """发送消息"""
+        """SendMessage"""
         try:
             channel, stub = self._get_villager_stub()
             response = stub.SendMessage(town_pb2.SendMessageRequest(
@@ -563,55 +563,55 @@ class VillagerCLI:
             if response.success:
                 print(f"\n✓ {response.message}")
                 if message_type == 'private':
-                    print(f"  发送给: {target}")
+                    print(f"  Send给: {target}")
                 else:
-                    print(f"  广播消息")
+                    print(f"  BroadcastMessage")
             else:
                 print(f"\n✗ {response.message}")
         except Exception as e:
-            print(f"\n✗ 错误: {e}")
+            print(f"\n✗ Error: {e}")
     
     def display_messages(self):
-        """显示消息列表"""
+        """显示Message列表"""
         messages = self.get_messages()
         
         if not messages:
-            print("\n📭 没有消息")
+            print("\n📭 没有Message")
             return
         
         print("\n" + "="*50)
-        print("  消息列表")
+        print("  Message列表")
         print("="*50)
         
         for msg in messages:
             status = "✓" if msg['is_read'] else "●"
             
-            # 格式化时间戳
+            # 格式化Time戳
             import datetime
             timestamp = msg['timestamp']
             if timestamp:
                 try:
-                    # 将时间戳转换为可读格式
+                    # 将Time戳转换为可读格式
                     dt = datetime.datetime.fromtimestamp(timestamp)
                     time_str = dt.strftime("%Y-%m-%d %H:%M:%S")
                 except:
-                    time_str = f"时间戳: {timestamp}"
+                    time_str = f"Time戳: {timestamp}"
             else:
-                time_str = "未知时间"
+                time_str = "未知Time"
             
             print(f"\n{status} [{msg['message_id']}] - {time_str}")
             print(f"  来自: {msg['from']}")
             print(f"  内容: {msg['content']}")
             if msg['type'] == 'private':
-                print(f"  发送给: {msg['to']}")
+                print(f"  Send给: {msg['to']}")
             else:
-                print(f"  类型: 广播")
+                print(f"  类型: Broadcast")
             print()
         
         print("="*50)
     
     def mark_messages_read(self, message_id=None):
-        """标记消息为已读"""
+        """标记Message为已读"""
         try:
             my_node_id = self.get_node_id()
             
@@ -627,64 +627,64 @@ class VillagerCLI:
             else:
                 print(f"\n✗ {response.message}")
         except Exception as e:
-            print(f"\n✗ 错误: {e}")
-        """获取商人价格"""
+            print(f"\n✗ Error: {e}")
+        """获取MerchantPrice"""
         try:
             channel, stub = self._get_merchant_stub()
             prices = stub.GetPrices(town_pb2.Empty())
             channel.close()
             
             print("\n" + "="*50)
-            print("  商人价格表")
+            print("  MerchantPrice表")
             print("="*50)
-            print("\n【商人出售】(你可以购买)")
+            print("\n【MerchantSell】(你可以Buy)")
             for price_info in prices.buy_prices:
                 print(f"  {price_info.item:15s} : {price_info.price:4d} 金币")
             
-            print("\n【商人收购】(你可以出售)")
+            print("\n【Merchant收购】(你可以Sell)")
             for price_info in prices.sell_prices:
                 print(f"  {price_info.item:15s} : {price_info.price:4d} 金币")
             print("="*50 + "\n")
         except Exception as e:
-            print(f"\n✗ 错误: {e}")
+            print(f"\n✗ Error: {e}")
     
     def show_help(self):
         """显示帮助"""
         print("\n" + "="*70)
         print("  可用命令")
         print("="*70)
-        print("\n【村民管理】")
-        print("  create          - 创建村民")
-        print("  info            - 查看我的信息")
+        print("\n【Villager管理】")
+        print("  create          - CreateVillager")
+        print("  info            - 查看我的Info")
         print("")
-        print("【生产与生活】")
-        print("  produce         - 执行生产")
-        print("  sleep           - 睡眠")
+        print("【Production与生活】")
+        print("  produce         - ExecuteProduction")
+        print("  sleep           - Sleep")
         print("")
-        print("【商人交易】")
-        print("  price           - 查看商人价格表")
-        print("  buy <item> <qty>   - 从商人购买物品")
-        print("  sell <item> <qty>  - 向商人出售物品")
+        print("【MerchantTrade】")
+        print("  price           - 查看MerchantPrice表")
+        print("  buy <item> <qty>   - 从MerchantBuyItem")
+        print("  sell <item> <qty>  - 向MerchantSellItem")
         print("")
-        print("【村民交易】")
-        print("  nodes           - 查看在线村民")
+        print("【VillagerTrade】")
+        print("  nodes           - 查看在线Villager")
         print("  trade <node_id> <buy/sell> <item> <qty> <price>")
-        print("                  - 向村民发起交易")
-        print("  mytrades        - 查看我的所有交易（发送的和收到的）")
-        print("  accept <trade_id>  - 接受交易请求")
-        print("  reject <trade_id>  - 拒绝交易请求")
-        print("  confirm <trade_id> - 确认交易")
-        print("  cancel <trade_id>  - 取消交易")
+        print("                  - 向Villager发起Trade")
+        print("  mytrades        - 查看我的所有Trade（Send的和收到的）")
+        print("  accept <trade_id>  - AcceptTrade请求")
+        print("  reject <trade_id>  - RejectTrade请求")
+        print("  confirm <trade_id> - ConfirmTrade")
+        print("  cancel <trade_id>  - CancelTrade")
         
-        print("\n消息系统:")
-        print("  messages          - 查看消息列表")
-        print("  send <node> <内容> - 发送私聊消息")
-        print("  broadcast <内容>   - 发送广播消息")
-        print("  read [msg_id]      - 标记消息为已读")
+        print("\nMessage系统:")
+        print("  messages          - 查看Message列表")
+        print("  send <node> <内容> - Send私聊Message")
+        print("  broadcast <内容>   - SendBroadcastMessage")
+        print("  read [msg_id]      - 标记Message为已读")
         
-        print("\n【时间管理】")
-        print("  time            - 查看当前时间")
-        print("  advance         - 推进时间(需要协调器)")
+        print("\n【Time管理】")
+        print("  time            - 查看当前Time")
+        print("  advance         - AdvanceTime(需要Coordinator)")
         print("")
         print("【其他】")
         print("  help            - 显示此帮助")
@@ -694,17 +694,17 @@ class VillagerCLI:
     def run(self):
         """运行交互式循环"""
         print("\n" + "="*70)
-        print("  村民节点交互式CLI (gRPC版本)")
+        print("  VillagerNode交互式CLI (gRPC版本)")
         print("="*70)
-        print(f"连接到: {self.villager_address}")
-        print(f"协调器: {self.coordinator_address}")
-        print(f"商人: {self.merchant_address}")
+        print(f"Connecting to: {self.villager_address}")
+        print(f"Coordinator: {self.coordinator_address}")
+        print(f"Merchant: {self.merchant_address}")
         print("="*70)
         
         # 检查连接
         if not self.check_connection():
-            print("\n⚠ 警告: 无法连接到村民节点")
-            print("请确保村民节点正在运行\n")
+            print("\n⚠ Warning: 无法Connecting toVillagerNode")
+            print("请确保VillagerNode正在运行\n")
         
         self.show_help()
         
@@ -726,9 +726,9 @@ class VillagerCLI:
                     self.show_help()
                 
                 elif action == 'create':
-                    print("\n创建村民")
+                    print("\nCreateVillager")
                     name = input("名字: ").strip()
-                    print("职业选择: farmer (农夫), carpenter (木匠), chef (厨师)")
+                    print("职业选择: farmer (Farmer), carpenter (木匠), chef (Chef)")
                     occupation = input("职业: ").strip()
                     print("性别选择: male (男), female (女)")
                     gender = input("性别: ").strip()
@@ -745,7 +745,7 @@ class VillagerCLI:
                     self.sleep()
                 
                 elif action == 'time':
-                    print(f"\n当前时间: {self.get_current_time()}")
+                    print(f"\n当前Time: {self.get_current_time()}")
                 
                 elif action == 'advance':
                     try:
@@ -757,7 +757,7 @@ class VillagerCLI:
                         else:
                             print(f"\n✗ {response.message}\n")
                     except Exception as e:
-                        print(f"\n✗ 错误: {e}")
+                        print(f"\n✗ Error: {e}")
                 
                 elif action == 'price':
                     self.get_merchant_prices()
@@ -810,22 +810,22 @@ class VillagerCLI:
                     else:
                         self.cancel_trade_request(parts[1])
                 
-                # 消息系统命令
+                # Message系统命令
                 elif action in ['messages', 'msgs']:
                     self.display_messages()
                 
-                # 发送私聊消息
+                # Send私聊Message
                 elif action == 'send' and len(parts) >= 3:
                     target = parts[1]
                     content = ' '.join(parts[2:])
                     self.send_message(target, content, 'private')
                 
-                # 发送广播消息
+                # SendBroadcastMessage
                 elif action == 'broadcast' and len(parts) >= 2:
                     content = ' '.join(parts[1:])
                     self.send_message('', content, 'broadcast')
                 
-                # 标记消息为已读
+                # 标记Message为已读
                 elif action == 'read':
                     if len(parts) >= 2:
                         self.mark_messages_read(parts[1])
@@ -840,15 +840,15 @@ class VillagerCLI:
                 print("\n\n再见！")
                 break
             except Exception as e:
-                print(f"\n✗ 错误: {e}")
+                print(f"\n✗ Error: {e}")
 
 
 def main():
     import argparse
-    parser = argparse.ArgumentParser(description='村民节点交互式CLI (gRPC)')
-    parser.add_argument('--port', type=int, required=True, help='村民节点端口')
-    parser.add_argument('--coordinator', type=int, default=50051, help='协调器端口')
-    parser.add_argument('--merchant', type=int, default=50052, help='商人端口')
+    parser = argparse.ArgumentParser(description='VillagerNode交互式CLI (gRPC)')
+    parser.add_argument('--port', type=int, required=True, help='VillagerNode端口')
+    parser.add_argument('--coordinator', type=int, default=50051, help='Coordinator端口')
+    parser.add_argument('--merchant', type=int, default=50052, help='Merchant端口')
     args = parser.parse_args()
     
     cli = VillagerCLI(args.port, args.coordinator, args.merchant)

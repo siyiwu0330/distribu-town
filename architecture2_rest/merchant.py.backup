@@ -1,8 +1,8 @@
 """
-Merchant Node - Architecture 2 (REST)
-Provides fixed-price item buying/selling services
-+ Centralized trade management system
-+ Price fluctuation mechanism
+MerchantNode - Architecture 2 (REST)
+提供固定Price的Item买卖服务
++ 中心化Trade管理系统
++ Price波动机制
 """
 
 from flask import Flask, request, jsonify
@@ -20,11 +20,11 @@ from common.models import MERCHANT_PRICES
 
 app = Flask(__name__)
 
-# Global state
+# 全局状态
 node_id = "merchant"
 prices = MERCHANT_PRICES
 
-# Trade management system
+# Trade管理系统
 trade_counter = 0
 active_trades = {}  # trade_id -> trade_data
 
@@ -37,69 +37,69 @@ def health():
 
 @app.route('/prices', methods=['GET'])
 def get_prices():
-    """Get price list"""
+    """获取Price表"""
     return jsonify(prices)
 
 
 @app.route('/buy', methods=['POST'])
 def buy_item():
-    """Player buys item from merchant"""
+    """玩家从Merchant处BuyItem"""
     data = request.json
     buyer_id = data['buyer_id']
     item = data['item']
     quantity = data['quantity']
     
-    # Check if merchant sells this item
+    # 检查Merchant是否Sell该Item
     if item not in prices['buy']:
         return jsonify({
             'success': False,
-            'message': f'Merchant does not sell {item}'
+            'message': f'Merchant不Sell {item}'
         }), 400
     
     price = prices['buy'][item]
     total_cost = price * quantity
     
-    print(f"[Merchant] {buyer_id} bought {quantity}x {item}, total cost: {total_cost}")
+    print(f"[Merchant] {buyer_id} Buy {quantity}x {item}, 总价: {total_cost}")
     
     return jsonify({
         'success': True,
-        'message': f'Sold {quantity}x {item} to {buyer_id}',
+        'message': f'Sell {quantity}x {item} 给 {buyer_id}',
         'total_cost': total_cost
     })
 
 
 @app.route('/sell', methods=['POST'])
 def sell_item():
-    """Player sells item to merchant"""
+    """玩家向MerchantSellItem"""
     data = request.json
     seller_id = data['seller_id']
     item = data['item']
     quantity = data['quantity']
     
-    # Check if merchant buys this item
+    # 检查Merchant是否收购该Item
     if item not in prices['sell']:
         return jsonify({
             'success': False,
-            'message': f'Merchant does not buy {item}'
+            'message': f'Merchant不收购 {item}'
         }), 400
     
     price = prices['sell'][item]
     total_income = price * quantity
     
-    print(f"[Merchant] Purchased {quantity}x {item} from {seller_id}, payment: {total_income}")
+    print(f"[Merchant] 从 {seller_id} 收购 {quantity}x {item}, 支付: {total_income}")
     
     return jsonify({
         'success': True,
-        'message': f'Purchased {quantity}x {item} from {seller_id}',
+        'message': f'收购 {quantity}x {item} 从 {seller_id}',
         'total_income': total_income
     })
 
 
 @app.route('/time/advance', methods=['POST'])
 def on_time_advance():
-    """Time advance notification"""
+    """TimeAdvanceNotify"""
     data = request.json
-    print(f"[Merchant] Time advanced: Day {data['day']} {data['time_of_day']}")
+    print(f"[Merchant] TimeAdvance: Day {data['day']} {data['time_of_day']}")
     
     return jsonify({
         'success': True,
@@ -107,28 +107,28 @@ def on_time_advance():
     })
 
 
-# ==================== Centralized Trade System ====================
+# ==================== 中心化Trade系统 ====================
 
 @app.route('/trade/create', methods=['POST'])
 def create_trade():
-    """Create trade (called by initiator)"""
+    """CreateTrade（由发起方调用）"""
     global trade_counter
     
     data = request.json
-    initiator_id = data['initiator_id']  # Initiator node_id
-    initiator_address = data['initiator_address']  # Initiator address
-    target_id = data['target_id']  # Target node_id
-    target_address = data['target_address']  # Target address
+    initiator_id = data['initiator_id']  # 发起方node_id
+    initiator_address = data['initiator_address']  # 发起方地址
+    target_id = data['target_id']  # 目标方node_id
+    target_address = data['target_address']  # 目标方地址
     offer_type = data['offer_type']  # 'buy' or 'sell'
     item = data['item']
     quantity = data['quantity']
     price = data['price']
     
-    # Generate globally unique trade ID
+    # 生成全局唯一的TradeID
     trade_counter += 1
     trade_id = f"trade_{trade_counter}"
     
-    # Create trade record
+    # CreateTrade记录
     trade_data = {
         'trade_id': trade_id,
         'initiator_id': initiator_id,
@@ -147,7 +147,7 @@ def create_trade():
     
     active_trades[trade_id] = trade_data
     
-    print(f"[Merchant-Trade] Created trade {trade_id}: {initiator_id} -> {target_id}")
+    print(f"[Merchant-Trade] CreateTrade {trade_id}: {initiator_id} -> {target_id}")
     print(f"[Merchant-Trade]   {offer_type} {quantity}x {item} for {price} gold")
     
     return jsonify({
@@ -159,7 +159,7 @@ def create_trade():
 
 @app.route('/trade/list', methods=['GET'])
 def list_trades():
-    """Query trade list"""
+    """QueryTrade列表"""
     node_id_param = request.args.get('node_id')
     trade_type = request.args.get('type', 'all')  # 'pending', 'sent', 'all'
     
@@ -170,13 +170,13 @@ def list_trades():
     
     for trade_id, trade in active_trades.items():
         if trade_type == 'pending' and trade['target_id'] == node_id_param:
-            # Received pending trades
+            # 收到的待HandleTrade
             result_trades.append(trade)
         elif trade_type == 'sent' and trade['initiator_id'] == node_id_param:
-            # Trades initiated by self
+            # 自己发起的Trade
             result_trades.append(trade)
         elif trade_type == 'all' and (trade['initiator_id'] == node_id_param or trade['target_id'] == node_id_param):
-            # All related trades
+            # 所有相关Trade
             result_trades.append(trade)
     
     return jsonify({
@@ -187,7 +187,7 @@ def list_trades():
 
 @app.route('/trade/accept', methods=['POST'])
 def accept_trade():
-    """Accept trade (called by target)"""
+    """AcceptTrade（由目标方调用）"""
     data = request.json
     trade_id = data['trade_id']
     node_id_param = data['node_id']
@@ -197,18 +197,18 @@ def accept_trade():
     
     trade = active_trades[trade_id]
     
-    # Verify this is the target
+    # 验证是否是目标方
     if trade['target_id'] != node_id_param:
         return jsonify({'success': False, 'message': 'Only target can accept trade'}), 403
     
-    # Check status
+    # 检查状态
     if trade['status'] != 'pending':
         return jsonify({'success': False, 'message': f"Trade status is {trade['status']}, cannot accept"}), 400
     
-    # Check target's resources
+    # 检查目标方的资源
     target_address = trade['target_address']
     try:
-        # Get target's villager information
+        # Get目标方的Villagerinformation
         response = requests.get(f"http://{target_address}/villager", timeout=5)
         if response.status_code != 200:
             return jsonify({'success': False, 'message': 'Cannot get target villager info'}), 400
@@ -218,27 +218,27 @@ def accept_trade():
         money = inventory.get('money', 0)
         items = inventory.get('items', {})
         
-        # Check if resources are sufficient
+        # 检查资源是否足够
         if trade['offer_type'] == 'buy':
-            # Initiator wants to buy, target sells, check if target has item
+            # 发起方想买，目标方要卖，检查目标方是否有Item
             if trade['item'] not in items or items[trade['item']] < trade['quantity']:
                 return jsonify({
                     'success': False,
                     'message': f"Target does not have enough {trade['item']}"
                 }), 400
         else:
-            # Initiator wants to sell, target buys, check if target has money
+            # 发起方想卖，目标方要买，检查目标方是否有钱
             if money < trade['price']:
                 return jsonify({
                     'success': False,
                     'message': f"Target does not have enough money"
                 }), 400
         
-        # Update trade status
+        # UpdateTrade状态
         trade['status'] = 'accepted'
         trade['accepted_at'] = time.time()
         
-        print(f"[Merchant-Trade] Trade {trade_id} accepted by {trade['target_id']}")
+        print(f"[Merchant-Trade] Trade {trade_id} 被Accept: {trade['target_id']}")
         
         return jsonify({
             'success': True,
@@ -247,13 +247,13 @@ def accept_trade():
         })
     
     except Exception as e:
-        print(f"[Merchant-Trade] Accept trade failed: {e}")
+        print(f"[Merchant-Trade] AcceptTradeFailed: {e}")
         return jsonify({'success': False, 'message': f'Error: {str(e)}'}), 500
 
 
 @app.route('/trade/confirm', methods=['POST'])
 def confirm_trade():
-    """Confirm trade (both parties must call)"""
+    """ConfirmTrade（双方都需要调用）"""
     data = request.json
     trade_id = data['trade_id']
     node_id_param = data['node_id']
@@ -263,37 +263,37 @@ def confirm_trade():
     
     trade = active_trades[trade_id]
     
-    # Check status
+    # 检查状态
     if trade['status'] != 'accepted':
         return jsonify({'success': False, 'message': f"Trade status is {trade['status']}, must be accepted"}), 400
     
-    # Determine if initiator or target
+    # 确定是发起方还是目标方
     if node_id_param == trade['initiator_id']:
         trade['initiator_confirmed'] = True
-        print(f"[Merchant-Trade] Initiator confirmed trade: {trade_id}")
+        print(f"[Merchant-Trade] 发起方ConfirmTrade: {trade_id}")
     elif node_id_param == trade['target_id']:
         trade['target_confirmed'] = True
-        print(f"[Merchant-Trade] Target confirmed trade: {trade_id}")
+        print(f"[Merchant-Trade] 目标方ConfirmTrade: {trade_id}")
     else:
         return jsonify({'success': False, 'message': 'Invalid node_id for this trade'}), 403
     
-    # Check if both parties confirmed
+    # 检查是否双方都Confirm
     if trade['initiator_confirmed'] and trade['target_confirmed']:
-        # Execute trade
-        print(f"[Merchant-Trade] Both parties confirmed, executing trade: {trade_id}")
+        # ExecuteTrade
+        print(f"[Merchant-Trade] 双方已Confirm，ExecuteTrade: {trade_id}")
         
         try:
-            # Execute atomic trade
+            # Execute原子Trade
             success = execute_trade(trade)
             
             if success:
                 trade['status'] = 'completed'
                 trade['completed_at'] = time.time()
                 
-                # Remove from active trades
+                # 从活跃Trade中移除
                 del active_trades[trade_id]
                 
-                print(f"[Merchant-Trade] Trade completed: {trade_id}")
+                print(f"[Merchant-Trade] Trade完成: {trade_id}")
                 
                 return jsonify({
                     'success': True,
@@ -304,10 +304,10 @@ def confirm_trade():
                 return jsonify({'success': False, 'message': 'Trade execution failed'}), 500
         
         except Exception as e:
-            print(f"[Merchant-Trade] Trade execution failed: {e}")
+            print(f"[Merchant-Trade] TradeExecuteFailed: {e}")
             return jsonify({'success': False, 'message': f'Error: {str(e)}'}), 500
     else:
-        # Waiting for other party to confirm
+        # Waiting另一方Confirm
         return jsonify({
             'success': True,
             'message': 'Confirmation recorded. Waiting for the other party.',
@@ -316,22 +316,22 @@ def confirm_trade():
 
 
 def execute_trade(trade):
-    """Execute trade (atomic operation)"""
+    """ExecuteTrade（原子操作）"""
     try:
         initiator_address = trade['initiator_address']
         target_address = trade['target_address']
         
-        # Determine who gives what based on trade type
+        # 根据Trade类型确定谁给什么
         if trade['offer_type'] == 'buy':
-            # Initiator wants to buy
+            # 发起方想买
             buyer_address = initiator_address
             seller_address = target_address
         else:
-            # Initiator wants to sell
+            # 发起方想卖
             buyer_address = target_address
             seller_address = initiator_address
         
-        # 1. Buyer pays
+        # 1. 买方扣钱
         response = requests.post(
             f"http://{buyer_address}/trade/execute",
             json={
@@ -342,10 +342,10 @@ def execute_trade(trade):
             timeout=5
         )
         if response.status_code != 200:
-            print(f"[Merchant-Trade] Buyer payment failed")
+            print(f"[Merchant-Trade] 买方支付Failed")
             return False
         
-        # 2. Seller deducts item
+        # 2. 卖方扣Item
         response = requests.post(
             f"http://{seller_address}/trade/execute",
             json={
@@ -357,8 +357,8 @@ def execute_trade(trade):
             timeout=5
         )
         if response.status_code != 200:
-            print(f"[Merchant-Trade] Seller item deduction failed")
-            # Roll back buyer's payment
+            print(f"[Merchant-Trade] 卖方扣除ItemFailed")
+            # 回滚买方的钱
             requests.post(
                 f"http://{buyer_address}/trade/execute",
                 json={
@@ -370,7 +370,7 @@ def execute_trade(trade):
             )
             return False
         
-        # 3. Buyer receives item
+        # 3. 买方加Item
         response = requests.post(
             f"http://{buyer_address}/trade/execute",
             json={
@@ -382,10 +382,10 @@ def execute_trade(trade):
             timeout=5
         )
         if response.status_code != 200:
-            print(f"[Merchant-Trade] Buyer failed to receive item")
+            print(f"[Merchant-Trade] 买方ReceiveItemFailed")
             return False
         
-        # 4. Seller receives money
+        # 4. 卖方加钱
         response = requests.post(
             f"http://{seller_address}/trade/execute",
             json={
@@ -396,20 +396,20 @@ def execute_trade(trade):
             timeout=5
         )
         if response.status_code != 200:
-            print(f"[Merchant-Trade] Seller failed to receive payment")
+            print(f"[Merchant-Trade] 卖方Receive金钱Failed")
             return False
         
-        print(f"[Merchant-Trade] Trade executed successfully: {trade['initiator_id']} <-> {trade['target_id']}")
+        print(f"[Merchant-Trade] TradeExecuteSuccess: {trade['initiator_id']} <-> {trade['target_id']}")
         return True
     
     except Exception as e:
-        print(f"[Merchant-Trade] Trade execution exception: {e}")
+        print(f"[Merchant-Trade] TradeExecute异常: {e}")
         return False
 
 
 @app.route('/trade/reject', methods=['POST'])
 def reject_trade():
-    """Reject trade (target rejects)"""
+    """RejectTrade（目标方Reject）"""
     data = request.json
     trade_id = data['trade_id']
     node_id_param = data['node_id']
@@ -419,17 +419,17 @@ def reject_trade():
     
     trade = active_trades[trade_id]
     
-    # Only the target can reject
+    # 只有目标方可以Reject
     if trade['target_id'] != node_id_param:
         return jsonify({'success': False, 'message': 'Only target can reject trade'}), 403
     
-    # Only trades in 'pending' status can be rejected
+    # 只有pending状态的Trade可以Reject
     if trade['status'] != 'pending':
         return jsonify({'success': False, 'message': f"Cannot reject trade with status {trade['status']}"}), 400
     
     del active_trades[trade_id]
     
-    print(f"[Merchant-Trade] Trade rejected: {trade_id} by {node_id_param}")
+    print(f"[Merchant-Trade] Trade已Reject: {trade_id} by {node_id_param}")
     
     return jsonify({
         'success': True,
@@ -439,7 +439,7 @@ def reject_trade():
 
 @app.route('/trade/cancel', methods=['POST'])
 def cancel_trade():
-    """Cancel trade (initiator cancels)"""
+    """CancelTrade（发起方Cancel）"""
     data = request.json
     trade_id = data['trade_id']
     node_id_param = data['node_id']
@@ -449,17 +449,17 @@ def cancel_trade():
     
     trade = active_trades[trade_id]
     
-    # Only the initiator can cancel
+    # 只有发起方可以Cancel
     if trade['initiator_id'] != node_id_param:
         return jsonify({'success': False, 'message': 'Only initiator can cancel trade'}), 403
     
-    # Only trades in 'pending' status can be canceled
+    # 只有pending状态的Trade可以Cancel
     if trade['status'] != 'pending':
         return jsonify({'success': False, 'message': f"Cannot cancel trade with status {trade['status']}"}), 400
     
     del active_trades[trade_id]
     
-    print(f"[Merchant-Trade] Trade canceled: {trade_id}")
+    print(f"[Merchant-Trade] Trade已Cancel: {trade_id}")
     
     return jsonify({
         'success': True,
@@ -470,7 +470,7 @@ def cancel_trade():
 def register_to_coordinator(coordinator_addr, port):
     """Register to coordinator"""
     import time
-    time.sleep(2)  # Wait for service to start
+    time.sleep(2)  # WaitingService started
     
     try:
         response = requests.post(
@@ -484,21 +484,21 @@ def register_to_coordinator(coordinator_addr, port):
         )
         
         if response.status_code == 200:
-            print(f"[Merchant] Successfully registered to coordinator: {coordinator_addr}")
+            print(f"[Merchant] SuccessRegister to coordinator: {coordinator_addr}")
         else:
             print(f"[Merchant] Registration failed: {response.status_code}")
     
     except Exception as e:
-        print(f"[Merchant] Unable to connect to coordinator {coordinator_addr}: {e}")
+        print(f"[Merchant] 无法Connecting toCoordinator {coordinator_addr}: {e}")
 
 
 def run_server(port=5001, coordinator_addr=None):
-    """Run server"""
-    print(f"[Merchant] REST Merchant Node starting on port {port}")
-    print(f"[Merchant] Selling prices: {prices['buy']}")
-    print(f"[Merchant] Buying prices: {prices['sell']}")
+    """运行服务器"""
+    print(f"[Merchant] RESTMerchantNodestarting on port {port}")
+    print(f"[Merchant] SellPrice: {prices['buy']}")
+    print(f"[Merchant] 收购Price: {prices['sell']}")
     
-    # Register to coordinator in a background thread
+    # 在后台线程Register to coordinator
     threading.Thread(
         target=register_to_coordinator,
         args=(coordinator_addr, port),
@@ -510,10 +510,10 @@ def run_server(port=5001, coordinator_addr=None):
 
 if __name__ == '__main__':
     import argparse
-    parser = argparse.ArgumentParser(description='REST Merchant Node service')
-    parser.add_argument('--port', type=int, default=5001, help='Listening port')
+    parser = argparse.ArgumentParser(description='RESTMerchantNode服务')
+    parser.add_argument('--port', type=int, default=5001, help='监听端口')
     parser.add_argument('--coordinator', type=str, default=f"{os.getenv('COORDINATOR_HOST', 'localhost')}:{os.getenv('COORDINATOR_PORT', '5000')}",
-                       help='Coordinator address')
+                       help='Coordinator地址')
     args = parser.parse_args()
     
     run_server(args.port, args.coordinator)

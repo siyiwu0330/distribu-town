@@ -1,137 +1,137 @@
-# Architecture 1: gRPC分布式架构
+# Architecture 1: gRPC Distributed Architecture
 
-## 概述
+## Overview
 
-这是基于gRPC的分布式虚拟小镇实现，展示了使用Protocol Buffers和gRPC进行微服务通信的架构。
+This is a gRPC-based implementation of the distributed virtual town, demonstrating an architecture using Protocol Buffers and gRPC for microservice communication.
 
-## 最新更新 ✨
+## Latest Updates ✨
 
-### 中心化交易系统
-- ✅ 实现了与REST版本相同的中心化交易管理
-- ✅ Merchant节点作为交易协调器
-- ✅ 支持完整的交易流程：Create → Accept → Confirm → Execute
-- ✅ 原子操作和回滚机制
-- ✅ 交互式CLI支持所有交易命令
+### Centralized Trading System
+- ✅ Implemented centralized trade management same as REST version
+- ✅ Merchant node acts as trade coordinator
+- ✅ Supports complete trade workflow: Create → Accept → Confirm → Execute
+- ✅ Atomic operations and rollback mechanism
+- ✅ Interactive CLI supports all trading commands
 
-详细说明请查看 [README_TRADING.md](README_TRADING.md)
+For details, see [README_TRADING.md](README_TRADING.md)
 
-## 架构特点
+## Architecture Features
 
-### gRPC通信
-- 使用Protocol Buffers定义服务接口
-- HTTP/2二进制协议，高性能
-- 强类型检查
-- 自动生成客户端代码
+### gRPC Communication
+- Service interfaces defined using Protocol Buffers
+- HTTP/2 binary protocol, high performance
+- Strong type checking
+- Auto-generated client code
 
-### 节点类型
-1. **Coordinator** - 时间协调器
-   - 管理全局时间
-   - 同步所有节点
-   - 节点注册和发现
+### Node Types
+1. **Coordinator** - Time coordinator
+   - Manages global time
+   - Synchronizes all nodes
+   - Node registration and discovery
 
-2. **Merchant** - 商人节点
-   - 提供物品买卖服务
-   - **中心化交易管理** (新增)
-   - 交易ID生成和状态管理
-   - 交易原子执行
+2. **Merchant** - Merchant node
+   - Provides item buying/selling services
+   - **Centralized trade management** (new)
+   - Trade ID generation and state management
+   - Atomic trade execution
 
-3. **Villager** - 村民节点
-   - 村民信息管理
-   - 生产、交易、睡眠
-   - **原子交易执行** (新增)
+3. **Villager** - Villager node
+   - Villager information management
+   - Production, trading, sleeping
+   - **Atomic trade execution** (new)
 
-## 目录结构
+## Directory Structure
 
 ```
 architecture1_grpc/
-├── proto/                      # Protocol Buffers定义
-│   ├── town.proto             # 服务和消息定义
-│   ├── town_pb2.py            # 生成的消息类
-│   └── town_pb2_grpc.py       # 生成的服务类
-├── coordinator.py              # 协调器实现
-├── merchant.py                 # 商人节点实现
-├── villager.py                 # 村民节点实现
-├── interactive_cli.py          # 交互式CLI (新增)
-├── test_centralized_trade.py  # 交易系统测试 (新增)
-├── start_test_nodes.sh         # 快速启动脚本 (新增)
-├── README.md                   # 本文件
-└── README_TRADING.md           # 交易系统详细说明 (新增)
+├── proto/                      # Protocol Buffers definitions
+│   ├── town.proto             # Service and message definitions
+│   ├── town_pb2.py            # Generated message classes
+│   └── town_pb2_grpc.py       # Generated service classes
+├── coordinator.py              # Coordinator implementation
+├── merchant.py                 # Merchant node implementation
+├── villager.py                 # Villager node implementation
+├── interactive_cli.py          # Interactive CLI (new)
+├── test_centralized_trade.py  # Trading system tests (new)
+├── start_test_nodes.sh         # Quick start script (new)
+├── README.md                   # This file
+└── README_TRADING.md           # Detailed trading system guide (new)
 ```
 
-## 快速开始
+## Quick Start
 
-### 1. 安装依赖
+### 1. Install Dependencies
 
 ```bash
 cd architecture1_grpc
 pip install -r requirements.txt
 ```
 
-### 2. 编译Proto文件（如需修改）
+### 2. Compile Proto Files (if modified)
 
 ```bash
 python -m grpc_tools.protoc -I. --python_out=. --grpc_python_out=. proto/town.proto
 ```
 
-### 3. 启动节点
+### 3. Start Nodes
 
-#### 方法1: 使用启动脚本（推荐）
+#### Method 1: Using Startup Script (Recommended)
 ```bash
 ./start_test_nodes.sh
 ```
 
-#### 方法2: 手动启动
+#### Method 2: Manual Start
 ```bash
-# 终端1: 协调器
+# Terminal 1: Coordinator
 python coordinator.py --port 50051
 
-# 终端2: 商人
+# Terminal 2: Merchant
 python merchant.py --port 50052
 
-# 终端3: 村民1
+# Terminal 3: Villager 1
 python villager.py --port 50053 --id node1
 
-# 终端4: 村民2
+# Terminal 4: Villager 2
 python villager.py --port 50054 --id node2
 ```
 
-### 4. 测试交易系统
+### 4. Test Trading System
 
 ```bash
-# 运行自动化测试
+# Run automated tests
 python test_centralized_trade.py
 
-# 或使用交互式CLI
+# Or use interactive CLI
 python interactive_cli.py --id node1 --address localhost:50053
 ```
 
-## 使用示例
+## Usage Examples
 
-### 交互式CLI
+### Interactive CLI
 
 ```bash
-# 启动CLI
+# Start CLI
 python interactive_cli.py --id node1 --address localhost:50053
 
-# 在CLI中
-> info                              # 查看我的信息
-> nodes                             # 查看在线村民
-> trade node2 sell wheat 5 50      # 向node2发起交易
-> mytrades                          # 查看我的交易
-> confirm trade_1                   # 确认交易
+# In CLI
+> info                              # View my information
+> nodes                             # View online villagers
+> trade node2 sell wheat 5 50      # Initiate trade with node2
+> mytrades                          # View my trades
+> confirm trade_1                   # Confirm trade
 ```
 
-### 编程接口
+### Programming Interface
 
 ```python
 import grpc
 from proto import town_pb2, town_pb2_grpc
 
-# 连接到商人节点
+# Connect to merchant node
 channel = grpc.insecure_channel('localhost:50052')
 stub = town_pb2_grpc.MerchantNodeStub(channel)
 
-# 创建交易
+# Create trade
 response = stub.CreateTrade(town_pb2.CreateTradeRequest(
     initiator_id='node1',
     initiator_address='localhost:50053',
@@ -147,106 +147,105 @@ print(f"Trade ID: {response.trade_id}")
 channel.close()
 ```
 
-## 与REST版本对比
+## Comparison with REST Version
 
-| 特性 | gRPC版本 | REST版本 |
-|-----|---------|---------|
-| 通信协议 | gRPC (HTTP/2) | HTTP/JSON |
-| 类型系统 | Protobuf强类型 | JSON动态类型 |
-| 性能 | 更高（二进制） | 较低（文本） |
-| 调试难度 | 较高 | 较低 |
-| 跨语言支持 | 优秀 | 优秀 |
-| 浏览器支持 | 需要grpc-web | 原生支持 |
-| 适用场景 | 内部微服务 | 公开API |
+| Feature | gRPC Version | REST Version |
+|---------|-------------|--------------|
+| Communication Protocol | gRPC (HTTP/2) | HTTP/JSON |
+| Type System | Protobuf strong types | JSON dynamic types |
+| Performance | Higher (binary) | Lower (text) |
+| Debugging Difficulty | Higher | Lower |
+| Cross-language Support | Excellent | Excellent |
+| Browser Support | Needs grpc-web | Native |
+| Use Case | Internal microservices | Public APIs |
 
-## 开发指南
+## Development Guide
 
-### 修改Proto定义
+### Modifying Proto Definitions
 
-1. 编辑 `proto/town.proto`
-2. 重新编译：
+1. Edit `proto/town.proto`
+2. Recompile:
    ```bash
    python -m grpc_tools.protoc -I. --python_out=. --grpc_python_out=. proto/town.proto
    ```
-3. 更新服务实现
+3. Update service implementations
 
-### 添加新功能
+### Adding New Features
 
-1. 在proto文件中定义新消息和RPC
-2. 重新编译proto
-3. 实现服务端逻辑
-4. 更新客户端代码
+1. Define new messages and RPCs in proto file
+2. Recompile proto
+3. Implement server-side logic
+4. Update client code
 
-### 调试技巧
+### Debugging Tips
 
-1. **查看日志**: 使用 `start_test_nodes.sh` 启动后，日志在 `logs/` 目录
-2. **gRPC错误**: 检查 `e.code()` 和 `e.details()`
-3. **连接问题**: 确认端口未被占用，使用 `lsof -i :50051`
+1. **View Logs**: After starting with `start_test_nodes.sh`, logs are in `logs/` directory
+2. **gRPC Errors**: Check `e.code()` and `e.details()`
+3. **Connection Issues**: Confirm ports are not occupied, use `lsof -i :50051`
 
-## 测试
+## Testing
 
-### 单元测试
+### Unit Tests
 ```bash
 python test_centralized_trade.py
 ```
 
-### 压力测试
+### Load Testing
 ```bash
-# TODO: 添加并发交易测试
+# TODO: Add concurrent trade tests
 ```
 
-## 已知限制
+## Known Limitations
 
-1. **AI Agent**: gRPC版本不包含AI Agent实现
-   - 建议使用REST版本（architecture2_rest）进行AI实验
-   - gRPC版本主要用于演示架构差异
+1. **AI Agent**: gRPC version doesn't include AI Agent implementation
+   - Recommend using REST version (architecture2_rest) for AI experiments
+   - gRPC version mainly demonstrates architectural differences
 
-2. **错误恢复**: 节点崩溃后交易状态可能丢失
-   - 生产环境需要持久化存储
+2. **Error Recovery**: Trade state may be lost after node crashes
+   - Production environment needs persistent storage
 
-3. **并发控制**: 当前实现为简单锁机制
-   - 高并发场景需要优化
+3. **Concurrency Control**: Current implementation uses simple locking
+   - Needs optimization for high concurrency scenarios
 
-## 常见问题
+## FAQ
 
-### Q: proto编译失败
-A: 确保安装了 `grpcio-tools`:
+### Q: Proto compilation failed
+A: Ensure `grpcio-tools` is installed:
 ```bash
 pip install grpcio-tools
 ```
 
-### Q: 连接失败
-A: 检查节点是否正常启动：
+### Q: Connection failed
+A: Check if nodes started properly:
 ```bash
-# 查看进程
+# Check processes
 ps aux | grep python
 
-# 查看端口
+# Check ports
 lsof -i :50051-50054
 ```
 
-### Q: 交易失败
-A: 查看详细文档 [README_TRADING.md](README_TRADING.md)
+### Q: Trade failed
+A: See detailed documentation [README_TRADING.md](README_TRADING.md)
 
-## 下一步
+## Next Steps
 
-- [ ] 添加AI Agent支持（可选）
-- [ ] 实现交易历史持久化
-- [ ] 添加更多测试用例
-- [ ] 性能基准测试
-- [ ] Docker容器化部署
+- [ ] Add AI Agent support (optional)
+- [ ] Implement trade history persistence
+- [ ] Add more test cases
+- [ ] Performance benchmarks
+- [ ] Docker containerization
 
-## 参考资源
+## Reference Resources
 
-- [gRPC Python文档](https://grpc.io/docs/languages/python/)
-- [Protocol Buffers指南](https://developers.google.com/protocol-buffers)
-- [REST版本对比](../architecture2_rest/README.md)
+- [gRPC Python Documentation](https://grpc.io/docs/languages/python/)
+- [Protocol Buffers Guide](https://developers.google.com/protocol-buffers)
+- [REST Version Comparison](../architecture2_rest/README.md)
 
-## 贡献
+## Contributing
 
-欢迎提交Issue和Pull Request！
+Issues and Pull Requests are welcome!
 
-## 许可证
+## License
 
 MIT License
-
